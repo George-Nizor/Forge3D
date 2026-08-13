@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Three.js House Study</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #9ec8dc; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .title, .controls, .note { position: fixed; z-index: 2; }
+    .title { top: 26px; left: 28px; color: #19272c; pointer-events: none; }
+    .title small { display: block; margin-bottom: 5px; color: #39758a; font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+    .title strong { display: block; font-family: Georgia, serif; font-size: clamp(30px, 5vw, 58px); font-weight: 500; letter-spacing: -.04em; }
+    .title span { color: #51676e; font-size: 11px; letter-spacing: .04em; }
+    .controls {
+      right: 24px; bottom: 24px; display: flex; gap: 6px; padding: 6px;
+      border: 1px solid rgba(255,255,255,.35); border-radius: 14px;
+      background: rgba(23, 34, 38, .7); backdrop-filter: blur(14px);
+    }
+    button {
+      padding: 11px 15px; border: 0; border-radius: 9px; color: #dce7e9;
+      background: rgba(255,255,255,.06); cursor: pointer; font-size: 10px;
+      font-weight: 700; letter-spacing: .07em;
+    }
+    button:hover, button.active { background: #d88c4b; color: #1d1712; }
+    .note {
+      bottom: 28px; left: 28px; color: rgba(31, 50, 56, .7);
+      font-size: 9px; font-weight: 700; letter-spacing: .1em; pointer-events: none;
+    }
+    body.night .title { color: #edf6f8; }
+    body.night .title small { color: #6ed7ef; }
+    body.night .title span, body.night .note { color: rgba(205, 229, 235, .65); }
+    @media (max-width: 700px) {
+      .controls { right: 12px; bottom: 12px; left: 12px; overflow-x: auto; }
+      button { flex: 1 0 auto; }
+      .note { display: none; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="title">
+    <small>THREE.JS ARCHITECTURE STUDY</small>
+    <strong>Willow House</strong>
+    <span>Procedural geometry · procedural surface textures</span>
+  </div>
+  <div class="controls">
+    <button id="time-button">NIGHT MODE</button>
+    <button id="door-button">OPEN DOOR</button>
+    <button id="orbit-button" class="active">AUTO ORBIT</button>
+    <button id="reset-button">RESET VIEW</button>
+  </div>
+  <div class="note">DRAG TO ORBIT · SCROLL TO ZOOM · ALL DIMENSIONS IN METERS</div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+    import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+    const textures = [];
+    const materials = [];
+
+    function canvasTexture(size, draw, repeatX = 1, repeatY = 1) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext("2d");
+      draw(context, size);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeatX, repeatY);
+      texture.anisotropy = 8;
+      textures.push(texture);
+      return texture;
+    }
+
+    function noise(context, size, opacity = 0.08, count = 3500) {
+      for (let index = 0; index < count; index += 1) {
+        const value = Math.random() > 0.5 ? 255 : 0;
+        context.fillStyle = `rgba(${value},${value},${value},${Math.random() * opacity})`;
+        const dot = Math.random() * 2 + 0.5;
+        context.fillRect(Math.random() * size, Math.random() * size, dot, dot);
+      }
+    }
+
+    const brickMap = canvasTexture(512, (context, size) => {
+      context.fillStyle = "#a95f43";
+      context.fillRect(0, 0, size, size);
+      const rows = 8;
+      const rowHeight = size / rows;
+      context.lineWidth = 7;
+      context.strokeStyle = "#d8c1a9";
+      for (let row = 0; row <= rows; row += 1) {
+        const y = row * rowHeight;
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(size, y);
+        context.stroke();
+        const offset = row % 2 ? size / 8 : 0;
+        for (let x = offset; x < size; x += size / 4) {
+          context.beginPath();
+          context.moveTo(x, y);
+          context.lineTo(x, y + rowHeight);
+          context.stroke();
+        }
+      }
+      noise(context, size, 0.13);
+    }, 3.2, 2.2);
+
+    const sidingMap = canvasTexture(512, (context, size) => {
+      context.fillStyle = "#d9d4c5";
+      context.fillRect(0, 0, size, size);
+      context.fillStyle = "rgba(72,61,48,.13)";
+      for (let y = 0; y < size; y += 42) context.fillRect(0, y, size, 5);
+      noise(context, size, 0.045, 2000);
+    }, 3, 2);
+
+    const roofMap = canvasTexture(512, (context, size) => {
+      context.fillStyle = "#313a3c";
+      context.fillRect(0, 0, size, size);
+      const shingleWidth = 64;
+      const shingleHeight = 34;
+      for (let row = 0; row < 16; row += 1) {
+        const offset = row % 2 ? shingleWidth / 2 : 0;
+        for (let x = -shingleWidth; x < size + shingleWidth; x += shingleWidth) {
+          const px = x + offset;
+          const py = row * shingleHeight;
+          const shade = 48 + Math.floor(Math.random() * 22);
+          context.fillStyle = `rgb(${shade},${shade + 6},${shade + 7})`;
+          context.fillRect(px + 2, py + 2, shingleWidth - 4, shingleHeight - 5);
+          context.strokeStyle = "rgba(12,16,17,.65)";
+          context.strokeRect(px + 2, py + 2, shingleWidth - 4, shingleHeight - 5);
+        }
+      }
+      noise(context, size, 0.08);
+    }, 2.2, 3.5);
+
+    const woodMap = canvasTexture(512, (context, size) => {
+      const gradient = context.createLinearGradient(0, 0, size, 0);
+      gradient.addColorStop(0, "#713a20");
+      gradient.addColorStop(.5, "#a45c32");
+      gradient.addColorStop(1, "#6a351e");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, size, size);
+      for (let x = 0; x < size; x += 74) {
+        context.fillStyle = "rgba(34,16,8,.35)";
+        context.fillRect(x, 0, 4, size);
+      }
+      for (let index = 0; index < 70; index += 1) {
+        context.strokeStyle = `rgba(46,20,10,${0.08 + Math.random() * 0.13})`;
+        context.beginPath();
+        const x = Math.random() * size;
+        context.moveTo(x, 0);
+        context.bezierCurveTo(x + 20, size * .3, x - 18, size * .7, x + 8, size);
+        context.stroke();
+      }
+    }, 1, 1.6);
+
+    const concreteMap = canvasTexture(512, (context, size) => {
+      context.fillStyle = "#9d9b91";
+      context.fillRect(0, 0, size, size);
+      noise(context, size, 0.16, 6000);
+      for (let index = 0; index < 50; index += 1) {
+        context.fillStyle = "rgba(40,42,39,.12)";
+        context.beginPath();
+        context.arc(Math.random() * size, Math.random() * size, Math.random() * 4 + 1, 0, Math.PI * 2);
+        context.fill();
+      }
+    }, 3, 3);
+
+    const grassMap = canvasTexture(512, (context, size) => {
+      context.fillStyle = "#557d3d";
+      context.fillRect(0, 0, size, size);
+      for (let index = 0; index < 12000; index += 1) {
+        const green = 70 + Math.floor(Math.random() * 65);
+        context.fillStyle = `rgba(${35 + Math.random() * 25},${green},${25 + Math.random() * 35},.55)`;
+        context.fillRect(Math.random() * size, Math.random() * size, 1, Math.random() * 5 + 1);
+      }
+    }, 18, 18);
+
+    function material(options) {
+      const value = new THREE.MeshStandardMaterial(options);
+      materials.push(value);
+      return value;
+    }
+
+    const brick = material({ map: brickMap, roughness: 0.86, metalness: 0.02 });
+    brick.name = "M_Brick";
+    const siding = material({ map: sidingMap, roughness: 0.72 });
+    siding.name = "M_Siding";
+    const shingles = material({ map: roofMap, roughness: 0.92 });
+    shingles.name = "M_RoofShingles";
+    const timber = material({ map: woodMap, roughness: 0.58 });
+    timber.name = "M_Timber";
+    const concrete = material({ map: concreteMap, roughness: 0.94 });
+    concrete.name = "M_Concrete";
+    const grass = material({ map: grassMap, roughness: 1 });
+    grass.name = "M_Grass";
+    const trim = material({ color: 0xf0ece0, roughness: 0.55 });
+    trim.name = "M_PaintedTrim";
+    const metal = material({ color: 0x3a4446, metalness: 0.82, roughness: 0.3 });
+    metal.name = "M_GutterMetal";
+    const pathMaterial = material({ color: 0xb6aea0, map: concreteMap, roughness: 0.94 });
+    const leafMaterials = [
+      material({ color: 0x315b2c, roughness: 0.95 }),
+      material({ color: 0x47763a, roughness: 0.95 }),
+      material({ color: 0x5c8744, roughness: 0.95 })
+    ];
+
+    const glass = new THREE.MeshPhysicalMaterial({
+      color: 0x9fd6e3,
+      roughness: 0.08,
+      metalness: 0,
+      transmission: 0.45,
+      transparent: true,
+      opacity: 0.48,
+      clearcoat: 1,
+      clearcoatRoughness: 0.05,
+      side: THREE.DoubleSide
+    });
+    glass.name = "M_WindowGlass";
+    materials.push(glass);
+
+    const interiorDay = new THREE.Color(0x6b655a);
+    const interiorNight = new THREE.Color(0xffc06b);
+    const interior = new THREE.MeshBasicMaterial({ color: interiorDay, side: THREE.DoubleSide });
+    interior.name = "M_InteriorGlow";
+    materials.push(interior);
+
+    const scene = new THREE.Scene();
+    const dayColor = new THREE.Color(0x9ec8dc);
+    const nightColor = new THREE.Color(0x07111e);
+    scene.background = dayColor.clone();
+    scene.fog = new THREE.Fog(dayColor.clone(), 18, 42);
+
+    const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 80);
+    const defaultCamera = new THREE.Vector3(11.2, 7.4, 12.6);
+    camera.position.copy(defaultCamera);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const room = new RoomEnvironment();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(room, 0.035).texture;
+    room.dispose();
+    pmrem.dispose();
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.055;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.45;
+    controls.target.set(0, 1.7, 0);
+    controls.minDistance = 7;
+    controls.maxDistance = 25;
+    controls.maxPolarAngle = Math.PI * 0.48;
+
+    const sun = new THREE.DirectionalLight(0xfff1d2, 4.2);
+    sun.position.set(8, 13, 7);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -11;
+    sun.shadow.camera.right = 11;
+    sun.shadow.camera.top = 11;
+    sun.shadow.camera.bottom = -11;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 35;
+    sun.shadow.bias = -0.00025;
+    scene.add(sun);
+
+    const skyLight = new THREE.HemisphereLight(0xbfe8ff, 0x557044, 1.8);
+    scene.add(skyLight);
+
+    const house = new THREE.Group();
+    house.name = "WillowHouse";
+    house.userData = {
+      assetType: "residential_house",
+      units: "meters",
+      upAxis: "Y",
+      proceduralTextures: true
+    };
+    scene.add(house);
+
+    function mesh(geometry, meshMaterial, name, position, rotation = [0, 0, 0], parent = house) {
+      const value = new THREE.Mesh(geometry, meshMaterial);
+      value.name = name;
+      value.position.set(...position);
+      value.rotation.set(...rotation);
+      value.castShadow = true;
+      value.receiveShadow = true;
+      parent.add(value);
+      return value;
+    }
+
+    function box(size, meshMaterial, name, position, rotation, parent) {
+      return mesh(new THREE.BoxGeometry(...size), meshMaterial, name, position, rotation, parent);
+    }
+
+    const width = 6.4;
+    const depth = 4.8;
+    const wallHeight = 3.15;
+
+    box([6.8, 0.45, 5.2], concrete, "Foundation", [0, 0.23, 0]);
+    box([width, wallHeight, depth], brick, "MainWalls", [0, 1.78, 0]);
+    box([width - 0.3, 0.2, depth - 0.3], trim, "UpperBand", [0, 3.3, 0]);
+
+    function gable(name, z, rotationY) {
+      const shape = new THREE.Shape();
+      shape.moveTo(-width / 2, 0);
+      shape.lineTo(width / 2, 0);
+      shape.lineTo(0, 1.85);
+      shape.closePath();
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.16,
+        bevelEnabled: false
+      });
+      const value = mesh(geometry, siding, name, [0, 3.27, z], [0, rotationY, 0]);
+      return value;
+    }
+    gable("FrontGable", depth / 2 + 0.01, 0);
+    gable("BackGable", -depth / 2 - 0.01, Math.PI);
+
+    const roofAngle = 33 * Math.PI / 180;
+    const roofLength = 3.95;
+    box([roofLength, 0.2, depth + 0.75], shingles, "LeftRoof",
+      [-1.59, 4.26, 0], [0, 0, roofAngle]);
+    box([roofLength, 0.2, depth + 0.75], shingles, "RightRoof",
+      [1.59, 4.26, 0], [0, 0, -roofAngle]);
+    box([0.18, 0.22, depth + 0.85], metal, "RidgeCap", [0, 5.28, 0]);
+
+    box([0.12, 0.12, depth + 0.75], metal, "LeftGutter", [-3.28, 3.18, 0]);
+    box([0.12, 0.12, depth + 0.75], metal, "RightGutter", [3.28, 3.18, 0]);
+    box([0.09, 2.8, 0.1], metal, "FrontDownpipe", [3.24, 1.72, 2.5]);
+
+    box([0.7, 2.15, 0.78], brick, "Chimney", [-1.78, 4.72, -0.9]);
+    box([0.84, 0.14, 0.9], concrete, "ChimneyCap", [-1.78, 5.83, -0.9]);
+
+    function windowUnit(name, position, rotationY = 0, scale = 1) {
+      const group = new THREE.Group();
+      group.name = name;
+      group.position.set(...position);
+      group.rotation.y = rotationY;
+      group.scale.setScalar(scale);
+      house.add(group);
+
+      const frameWidth = 1.24;
+      const frameHeight = 1.35;
+      box([frameWidth + 0.18, 0.1, 0.12], trim, `${name}_Top`, [0, frameHeight / 2, 0], [0, 0, 0], group);
+      box([frameWidth + 0.18, 0.1, 0.12], trim, `${name}_Bottom`, [0, -frameHeight / 2, 0], [0, 0, 0], group);
+      box([0.1, frameHeight, 0.12], trim, `${name}_Left`, [-frameWidth / 2, 0, 0], [0, 0, 0], group);
+      box([0.1, frameHeight, 0.12], trim, `${name}_Right`, [frameWidth / 2, 0, 0], [0, 0, 0], group);
+      box([0.06, frameHeight, 0.13], trim, `${name}_Mullion`, [0, 0, 0], [0, 0, 0], group);
+      box([frameWidth, 0.055, 0.13], trim, `${name}_Transom`, [0, 0.05, 0], [0, 0, 0], group);
+      box([frameWidth - 0.05, frameHeight - 0.05, 0.035], interior, `${name}_Interior`,
+        [0, 0, -0.055], [0, 0, 0], group).castShadow = false;
+      box([frameWidth - 0.05, frameHeight - 0.05, 0.03], glass, `${name}_Glass`,
+        [0, 0, 0.075], [0, 0, 0], group).castShadow = false;
+      box([frameWidth + 0.38, 0.1, 0.25], concrete, `${name}_Sill`,
+        [0, -frameHeight / 2 - 0.11, 0.06], [0, 0, 0], group);
+      return group;
+    }
+
+    windowUnit("FrontWindowLeft", [-1.9, 1.9, depth / 2 + 0.055]);
+    windowUnit("FrontWindowRight", [1.95, 1.9, depth / 2 + 0.055], 0, 0.82);
+    windowUnit("BackWindowLeft", [-1.8, 1.85, -depth / 2 - 0.055], Math.PI);
+    windowUnit("BackWindowRight", [1.65, 1.85, -depth / 2 - 0.055], Math.PI);
+    windowUnit("SideWindowLeft", [-width / 2 - 0.055, 1.9, -0.75], -Math.PI / 2);
+    windowUnit("SideWindowRight", [width / 2 + 0.055, 1.9, 0.55], Math.PI / 2);
+
+      box(
+        [1.38, 2.48, 0.04],
+        interior,
+        "DoorwayInterior",
+        [0, 1.56, depth / 2 + 0.035]
+      );
+
+      const doorPivot = new THREE.Group();
+    doorPivot.name = "FrontDoorHinge";
+    doorPivot.position.set(-0.62, 0.42, depth / 2 + 0.12);
+    house.add(doorPivot);
+    const door = box([1.24, 2.3, 0.12], timber, "FrontDoor", [0.62, 1.15, 0], [0, 0, 0], doorPivot);
+    box([0.95, 0.1, 0.05], trim, "DoorTopInset", [0.62, 1.83, 0.08], [0, 0, 0], doorPivot);
+    box([0.95, 0.1, 0.05], trim, "DoorMidInset", [0.62, 1.14, 0.08], [0, 0, 0], doorPivot);
+    const knob = mesh(new THREE.SphereGeometry(0.07, 20, 14), metal, "DoorKnob",
+      [1.03, 1.12, 0.12], [0, 0, 0], doorPivot);
+    knob.castShadow = false;
+    box([1.52, 0.14, 0.22], trim, "DoorFrameTop", [0, 2.8, depth / 2 + 0.11]);
+    box([0.14, 2.5, 0.22], trim, "DoorFrameLeft", [-0.75, 1.56, depth / 2 + 0.11]);
+    box([0.14, 2.5, 0.22], trim, "DoorFrameRight", [0.75, 1.56, depth / 2 + 0.11]);
+
+    box([1.8, 0.18, 1.05], concrete, "FrontStep", [0, 0.18, 3.02]);
+    box([2.25, 0.14, 1.35], shingles, "PorchRoof", [0, 3.02, 2.96], [-0.08, 0, 0]);
+    for (const x of [-0.92, 0.92]) {
+      box([0.13, 2.5, 0.13], trim, `PorchPost_${x}`, [x, 1.68, 3.34]);
+    }
+
+    const porchLightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffd19a,
+      emissive: 0xff8a32,
+      emissiveIntensity: 1.2
+    });
+    materials.push(porchLightMaterial);
+    mesh(new THREE.SphereGeometry(0.11, 18, 12), porchLightMaterial,
+      "PorchLightFixture", [0.66, 2.66, 2.62]);
+    const porchLight = new THREE.PointLight(0xffa95c, 0, 6, 2);
+    porchLight.position.set(0.66, 2.55, 3.1);
+    scene.add(porchLight);
+
+    const lawn = mesh(new THREE.PlaneGeometry(34, 28), grass, "Lawn", [0, 0, 0], [-Math.PI / 2, 0, 0], scene);
+    lawn.receiveShadow = true;
+    lawn.castShadow = false;
+
+    box([1.6, 0.06, 8.2], pathMaterial, "FrontPath", [0, 0.055, 7.15], [0, 0, 0], scene);
+    for (let index = 0; index < 7; index += 1) {
+      box([1.35, 0.08, 0.72], concrete, `Paver_${index}`,
+        [0, 0.105, 3.7 + index * 0.95], [0, (index % 2 ? 0.015 : -0.015), 0], scene);
+    }
+
+    function shrub(position, scale, materialIndex) {
+      const shrubMesh = mesh(
+        new THREE.IcosahedronGeometry(0.62, 2),
+        leafMaterials[materialIndex % leafMaterials.length],
+        `Shrub_${position.join("_")}`,
+        position,
+        [0, Math.random() * Math.PI, 0],
+        scene
+      );
+      shrubMesh.scale.set(scale, scale * 0.72, scale);
+      return shrubMesh;
+    }
+    [-2.7, -1.75, 1.8, 2.7].forEach((x, index) => shrub([x, 0.52, 2.88], 0.75, index));
+    shrub([-3.8, 0.66, -1.1], 1.05, 1);
+    shrub([3.9, 0.72, -1.3], 1.12, 2);
+
+    const treeTrunk = material({ color: 0x66402a, roughness: 1 });
+    mesh(new THREE.CylinderGeometry(0.25, 0.34, 3.6, 14), treeTrunk,
+      "TreeTrunk", [-6.3, 1.8, -2.6], [0, 0, 0], scene);
+    for (const [x, y, z, scale, materialIndex] of [
+      [-6.3, 4.1, -2.6, 1.55, 0],
+      [-5.45, 3.75, -2.6, 1.25, 1],
+      [-7.15, 3.65, -2.5, 1.2, 2],
+      [-6.25, 4.75, -2.75, 1.08, 1]
+    ]) shrub([x, y, z], scale, materialIndex);
+
+    let night = false;
+    let doorTarget = 0;
+    let doorAngle = 0;
+
+    const timeButton = document.querySelector("#time-button");
+    const doorButton = document.querySelector("#door-button");
+    const orbitButton = document.querySelector("#orbit-button");
+
+    timeButton.addEventListener("click", () => {
+      night = !night;
+      document.body.classList.toggle("night", night);
+      timeButton.classList.toggle("active", night);
+      timeButton.textContent = night ? "DAY MODE" : "NIGHT MODE";
+    });
+
+    doorButton.addEventListener("click", () => {
+      doorTarget = doorTarget > 0.5 ? 0 : 1;
+      doorButton.classList.toggle("active", doorTarget > 0.5);
+      doorButton.textContent = doorTarget > 0.5 ? "CLOSE DOOR" : "OPEN DOOR";
+    });
+
+    orbitButton.addEventListener("click", () => {
+      controls.autoRotate = !controls.autoRotate;
+      orbitButton.classList.toggle("active", controls.autoRotate);
+    });
+
+    document.querySelector("#reset-button").addEventListener("click", () => {
+      camera.position.copy(defaultCamera);
+      controls.target.set(0, 1.7, 0);
+      controls.update();
+    });
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const targetBackground = night ? nightColor : dayColor;
+      scene.background.lerp(targetBackground, 1 - Math.exp(-2.8 * delta));
+      scene.fog.color.copy(scene.background);
+      sun.intensity = THREE.MathUtils.lerp(sun.intensity, night ? 0.12 : 4.2, 1 - Math.exp(-3 * delta));
+      skyLight.intensity = THREE.MathUtils.lerp(skyLight.intensity, night ? 0.32 : 1.8, 1 - Math.exp(-3 * delta));
+      porchLight.intensity = THREE.MathUtils.lerp(porchLight.intensity, night ? 26 : 0, 1 - Math.exp(-4 * delta));
+      porchLightMaterial.emissiveIntensity = THREE.MathUtils.lerp(
+        porchLightMaterial.emissiveIntensity, night ? 5.5 : 1.2, 1 - Math.exp(-4 * delta)
+      );
+      interior.color.lerp(night ? interiorNight : interiorDay, 1 - Math.exp(-3 * delta));
+      doorAngle = THREE.MathUtils.lerp(doorAngle, doorTarget * -1.45, 1 - Math.exp(-4.5 * delta));
+      doorPivot.rotation.y = doorAngle;
+      controls.update(delta);
+      renderer.render(scene, camera);
+    });
+
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    });
+
+    addEventListener("pagehide", () => {
+      renderer.setAnimationLoop(null);
+      controls.dispose();
+      scene.traverse((object) => object.geometry?.dispose());
+      materials.forEach((value) => value.dispose());
+      textures.forEach((value) => value.dispose());
+      scene.environment?.dispose();
+      renderer.dispose();
+    }, { once: true });
+  </script>
+</body>
+</html>

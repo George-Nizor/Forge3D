@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TripoSplat Local Review</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #16191d; color: #f3f1ec; font-family: Inter, system-ui, sans-serif; }
+    canvas { display: block; }
+    .panel { position: fixed; z-index: 4; top: 18px; left: 18px; width: min(430px, calc(100vw - 36px)); padding: 16px; border: 1px solid #ffffff20; border-radius: 14px; background: #11151acc; box-shadow: 0 15px 45px #0007; backdrop-filter: blur(14px); }
+    h1 { margin: 0 0 7px; font-size: 19px; }
+    p { margin: 0; color: #b8c0c8; font-size: 12px; line-height: 1.5; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    label, button { border: 1px solid #ffffff24; border-radius: 9px; background: #ffffff0d; color: #f5f3ed; padding: 9px 11px; font: inherit; font-size: 11px; cursor: pointer; }
+    label:hover, button:hover { background: #ffffff18; }
+    input { display: none; }
+    #status { margin-top: 10px; color: #e0ad6b; font-size: 11px; }
+    .drop { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; border: 3px dashed transparent; color: transparent; font-size: 22px; font-weight: 700; }
+    body.drag .drop { color: #fff; background: #0d1118bb; border-color: #e0ad6b; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.1.0/spark.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <section class="panel">
+    <h1>TripoSplat local review</h1>
+    <p>Drop a generated <code>.splat</code> or Gaussian <code>.ply</code> file into the viewport. This is a true splat renderer—not a point-cloud or mesh approximation.</p>
+    <div class="row">
+      <label>Choose file<input id="file" type="file" accept=".splat,.ply,.spz,.ksplat,.sog" /></label>
+      <button id="orbit">Auto orbit</button>
+      <button id="reset">Reset view</button>
+    </div>
+    <div id="status">Waiting for a local splat file.</div>
+  </section>
+  <div class="drop">Drop splat to inspect</div>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x20262d);
+    const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, .01, 100);
+    camera.position.set(2.3, 1.6, 2.8);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.prepend(renderer.domElement);
+    const spark = new SparkRenderer({ renderer });
+    scene.add(spark);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = .06;
+    let current = null;
+    let loadSequence = 0;
+
+    function frameSplat(splat) {
+      splat.updateMatrixWorld(true);
+      const bounds = splat.getBoundingBox(true).applyMatrix4(splat.matrixWorld);
+      const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+      const radius = Math.max(sphere.radius, 0.1);
+      const halfFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
+      const distance = (radius / Math.tan(halfFov)) * 1.35;
+      const viewDirection = new THREE.Vector3(1, 0.65, 1.15).normalize();
+
+      controls.target.copy(sphere.center);
+      camera.position.copy(sphere.center).addScaledVector(viewDirection, distance);
+      camera.near = Math.max(distance / 100, 0.001);
+      camera.far = Math.max(distance * 20, 100);
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
+
+    function resetView() {
+      if (current?.isInitialized) frameSplat(current);
+    }
+
+    async function loadFile(file) {
+      if (!file) return;
+      const status = document.querySelector("#status");
+      const sequence = ++loadSequence;
+      status.textContent = `Reading ${file.name}…`;
+
+      try {
+        const fileBytes = new Uint8Array(await file.arrayBuffer());
+        if (sequence !== loadSequence) return;
+
+        if (current) {
+          scene.remove(current);
+          current.dispose();
+          current = null;
+        }
+
+        const next = new SplatMesh({
+          fileBytes,
+          fileName: file.name,
+          onProgress: event => {
+            if (sequence !== loadSequence) return;
+            const progress = event.lengthComputable
+              ? ` ${Math.round((event.loaded / event.total) * 100)}%`
+              : "";
+            status.textContent = `Decoding ${file.name}${progress}…`;
+          },
+        });
+
+        // Convert TripoSplat's OpenCV camera convention to OpenGL/Three.js.
+        next.quaternion.set(1, 0, 0, 0);
+        next.name = file.name;
+        scene.add(next);
+        await next.initialized;
+
+        if (sequence !== loadSequence) {
+          scene.remove(next);
+          next.dispose();
+          return;
+        }
+
+        current = next;
+        frameSplat(current);
+        status.textContent = `Showing ${file.name} · ${current.numSplats.toLocaleString()} splats · ${(file.size / 1048576).toFixed(2)} MiB`;
+      } catch (error) {
+        console.error(error);
+        status.textContent = `Could not decode ${file.name}: ${error?.message ?? error}`;
+      }
+    }
+
+    document.querySelector("#file").addEventListener("change", event => loadFile(event.target.files[0]));
+    document.querySelector("#reset").addEventListener("click", resetView);
+    document.querySelector("#orbit").addEventListener("click", event => {
+      controls.autoRotate = !controls.autoRotate;
+      controls.autoRotateSpeed = .75;
+      event.currentTarget.textContent = controls.autoRotate ? "Stop orbit" : "Auto orbit";
+    });
+    addEventListener("dragenter", event => { event.preventDefault(); document.body.classList.add("drag"); });
+    addEventListener("dragover", event => event.preventDefault());
+    addEventListener("dragleave", event => { if (event.target === document.documentElement) document.body.classList.remove("drag"); });
+    addEventListener("drop", event => {
+      event.preventDefault();
+      document.body.classList.remove("drag");
+      loadFile(event.dataTransfer.files[0]);
+    });
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      renderer.render(scene, camera);
+    });
+    addEventListener("pagehide", () => {
+      renderer.setAnimationLoop(null);
+      controls.dispose();
+      current?.dispose();
+      renderer.dispose();
+    }, { once: true });
+  </script>
+</body>
+</html>

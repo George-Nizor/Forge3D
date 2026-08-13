@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Northlight Residence — Three.js Architectural Study</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ink: #f5f2ea;
+      --muted: #b7bdc2;
+      --glass: rgba(12, 16, 19, 0.72);
+      --edge: rgba(255, 255, 255, 0.13);
+      --accent: #d9a15d;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #9fb7c6; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hud {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      color: var(--ink);
+    }
+    .brand {
+      position: absolute;
+      top: 24px;
+      left: 26px;
+      max-width: min(480px, calc(100vw - 52px));
+      padding: 17px 19px 16px;
+      border: 1px solid var(--edge);
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(8, 12, 14, .82), rgba(8, 12, 14, .51));
+      box-shadow: 0 20px 60px rgba(0,0,0,.22);
+      backdrop-filter: blur(16px) saturate(130%);
+    }
+    .eyebrow {
+      margin-bottom: 7px;
+      color: #e4b67a;
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 0; font-size: clamp(20px, 3vw, 34px); line-height: 1; letter-spacing: -.035em; }
+    .subtitle { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .controls {
+      pointer-events: auto;
+      position: absolute;
+      right: 22px;
+      bottom: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: min(650px, calc(100vw - 44px));
+      padding: 10px;
+      border: 1px solid var(--edge);
+      border-radius: 14px;
+      background: var(--glass);
+      box-shadow: 0 14px 50px rgba(0,0,0,.25);
+      backdrop-filter: blur(16px) saturate(130%);
+    }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 9px;
+      padding: 9px 12px;
+      background: rgba(255,255,255,.07);
+      color: #f7f5ef;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 680;
+      letter-spacing: .02em;
+      cursor: pointer;
+      transition: background .18s ease, border-color .18s ease, transform .18s ease;
+    }
+    button:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.26); transform: translateY(-1px); }
+    button.active { color: #17130f; background: var(--accent); border-color: #ecc18c; }
+    .spec {
+      position: absolute;
+      left: 25px;
+      bottom: 24px;
+      padding: 10px 12px;
+      border-left: 2px solid var(--accent);
+      color: rgba(255,255,255,.82);
+      background: rgba(7,10,12,.42);
+      font-size: 10px;
+      line-height: 1.65;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      backdrop-filter: blur(8px);
+    }
+    .hint {
+      position: absolute;
+      top: 26px;
+      right: 26px;
+      color: rgba(255,255,255,.75);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-shadow: 0 1px 8px rgba(0,0,0,.5);
+      text-transform: uppercase;
+    }
+    @media (max-width: 700px) {
+      .brand { top: 12px; left: 12px; }
+      .hint, .spec { display: none; }
+      .controls { right: 12px; bottom: 12px; max-width: calc(100vw - 24px); }
+      button { padding: 8px 9px; }
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="hud">
+    <section class="brand">
+      <div class="eyebrow">Procedural architectural study · 2026</div>
+      <h1>Northlight Residence</h1>
+      <p class="subtitle">Contemporary craftsman massing, true recessed openings, layered roof geometry and fully procedural materials.</p>
+    </section>
+    <div class="hint">Drag to orbit · scroll to zoom · right-drag to pan</div>
+    <div class="spec">16.8 m frontage<br>Mixed cedar · basalt · steel<br>Z-up authoring · metre scale</div>
+    <nav class="controls" aria-label="Scene controls">
+      <button id="viewButton">View · Hero</button>
+      <button id="doorButton">Open entry</button>
+      <button id="timeButton">Night mode</button>
+      <button id="orbitButton">Auto orbit</button>
+      <button id="detailButton">Details on</button>
+    </nav>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+    import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const scene = new THREE.Scene();
+    scene.name = "NorthlightResidenceScene";
+    scene.background = new THREE.Color(0xa8c2d0);
+    scene.fog = new THREE.FogExp2(0xa8c2d0, 0.011);
+
+    const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 120);
+    camera.position.set(18.5, 10.6, 23.5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: !mobile, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.5 : 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    document.body.prepend(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 3.2, 0.6);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.055;
+    controls.minDistance = 8;
+    controls.maxDistance = 48;
+    controls.maxPolarAngle = Math.PI * 0.47;
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const roomEnvironment = new RoomEnvironment();
+    scene.environment = pmrem.fromScene(roomEnvironment, 0.04).texture;
+    roomEnvironment.dispose();
+    pmrem.dispose();
+
+    const sun = new THREE.DirectionalLight(0xfff1d3, 4.0);
+    sun.name = "LateAfternoonSun";
+    sun.position.set(-10, 17, 11);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(mobile ? 1536 : 3072, mobile ? 1536 : 3072);
+    sun.shadow.camera.left = -20;
+    sun.shadow.camera.right = 20;
+    sun.shadow.camera.top = 18;
+    sun.shadow.camera.bottom = -12;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 50;
+    sun.shadow.bias = -0.00025;
+    sun.shadow.normalBias = 0.028;
+    scene.add(sun);
+
+    const ambient = new THREE.HemisphereLight(0xb9d7e7, 0x53604a, 1.75);
+    ambient.name = "SkyGroundFill";
+    scene.add(ambient);
+
+    const entryLight = new THREE.PointLight(0xffb75e, 0, 9, 2);
+    entryLight.name = "EntryLight";
+    entryLight.position.set(-1.05, 3.0, 4.55);
+    entryLight.castShadow = false;
+    scene.add(entryLight);
+
+    const textures = [];
+    const materials = [];
+    const geometries = new Set();
+    const staticGroups = [];
+    const animated = { night: 0, door: 0, detail: 1 };
+
+    function seeded(seed = 1) {
+      let value = seed >>> 0;
+      return () => {
+        value += 0x6D2B79F5;
+        let t = value;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function proceduralTexture(size, repeatX, repeatY, painter) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const context = canvas.getContext("2d");
+      painter(context, size);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeatX, repeatY);
+      texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      textures.push(texture);
+      return texture;
+    }
+
+    const cedarMap = proceduralTexture(512, 4, 5, (ctx, size) => {
+      const random = seeded(10);
+      ctx.fillStyle = "#9a7551";
+      ctx.fillRect(0, 0, size, size);
+      const rowH = 48;
+      for (let row = -1; row < size / rowH + 1; row++) {
+        const offset = row % 2 ? -26 : 0;
+        for (let x = offset; x < size; x += 52) {
+          const y = row * rowH;
+          const tone = 114 + Math.floor(random() * 47);
+          ctx.fillStyle = `rgb(${tone + 28},${tone + 4},${Math.max(62, tone - 25)})`;
+          ctx.fillRect(x + 1, y + 2, 49, rowH - 4);
+          ctx.strokeStyle = "rgba(48,31,18,.35)";
+          ctx.strokeRect(x + 1, y + 2, 49, rowH - 4);
+          for (let grain = 0; grain < 3; grain++) {
+            ctx.strokeStyle = `rgba(255,240,210,${0.035 + random() * .04})`;
+            ctx.beginPath();
+            ctx.moveTo(x + 6 + random() * 35, y + 5);
+            ctx.lineTo(x + 4 + random() * 39, y + rowH - 6);
+            ctx.stroke();
+          }
+        }
+      }
+    });
+
+    const basaltMap = proceduralTexture(512, 3, 3, (ctx, size) => {
+      const random = seeded(22);
+      ctx.fillStyle = "#6e706c";
+      ctx.fillRect(0, 0, size, size);
+      const rowH = 54;
+      for (let row = 0; row <= size / rowH; row++) {
+        let x = row % 2 ? -45 : -8;
+        while (x < size) {
+          const width = 45 + random() * 85;
+          const y = row * rowH;
+          const tone = 65 + random() * 55;
+          ctx.fillStyle = `rgb(${tone + 15},${tone + 14},${tone + 9})`;
+          ctx.fillRect(x + 3, y + 3, width - 6, rowH - 6);
+          ctx.strokeStyle = "rgba(205,201,190,.55)";
+          ctx.lineWidth = 4;
+          ctx.strokeRect(x + 1, y + 1, width - 2, rowH - 2);
+          x += width;
+        }
+      }
+      for (let i = 0; i < 1800; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${random() * .06})`;
+        ctx.fillRect(random() * size, random() * size, 1, 1);
+      }
+    });
+
+    const charcoalMap = proceduralTexture(512, 5, 4, (ctx, size) => {
+      const random = seeded(32);
+      ctx.fillStyle = "#293034";
+      ctx.fillRect(0, 0, size, size);
+      const strip = 32;
+      for (let x = 0; x < size; x += strip) {
+        const tone = 34 + Math.floor(random() * 13);
+        ctx.fillStyle = `rgb(${tone},${tone + 7},${tone + 9})`;
+        ctx.fillRect(x + 3, 0, strip - 6, size);
+        ctx.fillStyle = "rgba(0,0,0,.33)";
+        ctx.fillRect(x, 0, 3, size);
+        ctx.fillStyle = "rgba(255,255,255,.045)";
+        ctx.fillRect(x + 3, 0, 1, size);
+      }
+    });
+
+    const slateMap = proceduralTexture(512, 5, 5, (ctx, size) => {
+      const random = seeded(47);
+      ctx.fillStyle = "#252a2c";
+      ctx.fillRect(0, 0, size, size);
+      const h = 32;
+      for (let row = 0; row < size / h; row++) {
+        for (let x = (row % 2 ? -24 : 0); x < size; x += 48) {
+          const tone = 29 + Math.floor(random() * 18);
+          ctx.fillStyle = `rgb(${tone},${tone + 3},${tone + 5})`;
+          ctx.fillRect(x + 1, row * h + 1, 46, h - 3);
+          ctx.strokeStyle = "rgba(0,0,0,.42)";
+          ctx.strokeRect(x + 1, row * h + 1, 46, h - 3);
+        }
+      }
+    });
+
+    const timberMap = proceduralTexture(512, 2, 4, (ctx, size) => {
+      const random = seeded(58);
+      const gradient = ctx.createLinearGradient(0, 0, size, 0);
+      gradient.addColorStop(0, "#5d3925");
+      gradient.addColorStop(.5, "#a56b3f");
+      gradient.addColorStop(1, "#4e2e20");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 120; i++) {
+        ctx.strokeStyle = `rgba(${random() > .5 ? "255,213,162" : "38,17,8"},${.03 + random() * .1})`;
+        ctx.lineWidth = 1 + random() * 2;
+        ctx.beginPath();
+        const x = random() * size;
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + random() * 24 - 12, size * .3, x + random() * 35 - 17, size * .72, x + random() * 18 - 9, size);
+        ctx.stroke();
+      }
+    });
+
+    const concreteMap = proceduralTexture(512, 3, 3, (ctx, size) => {
+      const random = seeded(67);
+      ctx.fillStyle = "#a8a59d";
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 10000; i++) {
+        const tone = random() > .5 ? 255 : 30;
+        ctx.fillStyle = `rgba(${tone},${tone},${tone},${random() * .055})`;
+        const r = random() * 2.3;
+        ctx.fillRect(random() * size, random() * size, r, r);
+      }
+    });
+
+    const lawnMap = proceduralTexture(512, 6, 6, (ctx, size) => {
+      const random = seeded(79);
+      ctx.fillStyle = "#50623a";
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 15000; i++) {
+        const green = 58 + random() * 70;
+        ctx.strokeStyle = `rgba(${green * .55},${green},${green * .38},${.18 + random() * .45})`;
+        const x = random() * size;
+        const y = random() * size;
+        ctx.beginPath();
+        ctx.moveTo(x, y + 3);
+        ctx.lineTo(x + random() * 3 - 1.5, y);
+        ctx.stroke();
+      }
+    });
+
+    const terrazzoMap = proceduralTexture(512, 2, 2, (ctx, size) => {
+      const random = seeded(83);
+      ctx.fillStyle = "#d0cbc0";
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 900; i++) {
+        const hues = ["#7e7469", "#eee7d8", "#655f5a", "#b99878"];
+        ctx.fillStyle = hues[Math.floor(random() * hues.length)];
+        const x = random() * size, y = random() * size, r = 1 + random() * 4;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    function standard(parameters) {
+      const material = new THREE.MeshStandardMaterial(parameters);
+      materials.push(material);
+      return material;
+    }
+
+    const mat = {
+      cedar: standard({ map: cedarMap, color: 0xc59a6e, roughness: .82, metalness: 0 }),
+      basalt: standard({ map: basaltMap, color: 0x777973, roughness: .93 }),
+      charcoal: standard({ map: charcoalMap, color: 0x3e484b, roughness: .78 }),
+      slate: standard({ map: slateMap, color: 0x343b3e, roughness: .72 }),
+      metalRoof: standard({ color: 0x2c3235, roughness: .38, metalness: .7 }),
+      blackMetal: standard({ color: 0x111719, roughness: .3, metalness: .75 }),
+      bronze: standard({ color: 0x8c5d32, roughness: .27, metalness: .82 }),
+      timber: standard({ map: timberMap, color: 0xb47a4e, roughness: .62 }),
+      whiteTrim: standard({ color: 0xe9e5db, roughness: .54 }),
+      warmWhite: standard({ color: 0xd6d2c8, roughness: .68 }),
+      concrete: standard({ map: concreteMap, color: 0xc3bfb5, roughness: .9 }),
+      terrazzo: standard({ map: terrazzoMap, color: 0xdad4c8, roughness: .75 }),
+      lawn: standard({ map: lawnMap, color: 0x708758, roughness: 1 }),
+      soil: standard({ color: 0x2d2118, roughness: 1 }),
+      bark: standard({ color: 0x554331, roughness: 1 }),
+      leafDark: standard({ color: 0x24462e, roughness: .88 }),
+      leafLight: standard({ color: 0x4e7846, roughness: .88 }),
+      warmInterior: standard({ color: 0x5b4934, emissive: 0xffa94d, emissiveIntensity: .22, roughness: .9 }),
+      curtain: standard({ color: 0xb5a999, roughness: 1 }),
+      water: new THREE.MeshPhysicalMaterial({
+        color: 0x9fc4c7, roughness: .12, metalness: 0, transmission: .45,
+        transparent: true, opacity: .78, thickness: .3, ior: 1.33
+      }),
+      glass: new THREE.MeshPhysicalMaterial({
+        color: 0xa7c4cf, roughness: .08, metalness: .06, transmission: .74,
+        transparent: true, opacity: .58, thickness: .18, ior: 1.48, envMapIntensity: 1.45
+      })
+    };
+    materials.push(mat.water, mat.glass);
+
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const unitCylinder = new THREE.CylinderGeometry(1, 1, 1, 16);
+    const unitSphere = new THREE.IcosahedronGeometry(1, 2);
+    geometries.add(unitBox);
+    geometries.add(unitCylinder);
+    geometries.add(unitSphere);
+
+    function meshFrom(geometry, material, name, parent = scene) {
+      geometries.add(geometry);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = name;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    function box(size, position, material, name, parent = scene, options = {}) {
+      const mesh = new THREE.Mesh(unitBox, material);
+      mesh.name = name;
+      mesh.position.set(...position);
+      mesh.scale.set(...size);
+      mesh.rotation.set(...(options.rotation ?? [0, 0, 0]));
+      mesh.castShadow = options.castShadow ?? true;
+      mesh.receiveShadow = options.receiveShadow ?? true;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    function cylinder(radius, height, position, material, name, parent = scene, options = {}) {
+      const mesh = new THREE.Mesh(unitCylinder, material);
+      mesh.name = name;
+      mesh.scale.set(radius, height, radius);
+      mesh.position.set(...position);
+      mesh.rotation.set(...(options.rotation ?? [0, 0, 0]));
+      mesh.castShadow = options.castShadow ?? true;
+      mesh.receiveShadow = options.receiveShadow ?? true;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    const residence = new THREE.Group();
+    residence.name = "NorthlightResidence";
+    residence.userData = {
+      units: "metres",
+      upAxis: "Y (Three.js); authoring convention corresponds to Blender Z-up",
+      style: "contemporary craftsman",
+      textures: "procedural canvas maps",
+      exportIntent: "visual benchmark before GLB/Godot pipeline"
+    };
+    scene.add(residence);
+
+    function wallWithOpenings({ x, bottom, width, height, front, depth, material, openings = [], name, parent = residence }) {
+      const xLines = [-width / 2, width / 2];
+      const yLines = [0, height];
+      for (const opening of openings) {
+        xLines.push(opening.x - opening.w / 2, opening.x + opening.w / 2);
+        yLines.push(opening.y, opening.y + opening.h);
+      }
+      xLines.sort((a, b) => a - b);
+      yLines.sort((a, b) => a - b);
+      const uniqueX = [...new Set(xLines.map(value => +value.toFixed(4)))];
+      const uniqueY = [...new Set(yLines.map(value => +value.toFixed(4)))];
+      const group = new THREE.Group();
+      group.name = name;
+      parent.add(group);
+      for (let ix = 0; ix < uniqueX.length - 1; ix++) {
+        for (let iy = 0; iy < uniqueY.length - 1; iy++) {
+          const left = uniqueX[ix], right = uniqueX[ix + 1];
+          const low = uniqueY[iy], high = uniqueY[iy + 1];
+          const midX = (left + right) / 2, midY = (low + high) / 2;
+          const removed = openings.some(opening =>
+            midX > opening.x - opening.w / 2 + .001 &&
+            midX < opening.x + opening.w / 2 - .001 &&
+            midY > opening.y + .001 &&
+            midY < opening.y + opening.h - .001
+          );
+          if (!removed) {
+            box(
+              [right - left, high - low, depth],
+              [x + midX, bottom + midY, front - depth / 2],
+              material,
+              `${name}_Panel_${ix}_${iy}`,
+              group
+            );
+          }
+        }
+      }
+      return group;
+    }
+
+    function gableFace({ x, eave, width, rise, front, depth, material, name, parent = residence }) {
+      const shape = new THREE.Shape();
+      shape.moveTo(-width / 2, 0);
+      shape.lineTo(width / 2, 0);
+      shape.lineTo(0, rise);
+      shape.closePath();
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+      const mesh = meshFrom(geometry, material, name, parent);
+      mesh.position.set(x, eave, front - depth);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    function frontGableRoof({ x, z, eave, width, depth, rise, material, name, seams = true, parent = residence }) {
+      const group = new THREE.Group();
+      group.name = name;
+      parent.add(group);
+      const run = width / 2 + .42;
+      const slope = Math.hypot(run, rise + .18);
+      const pitch = Math.atan2(rise + .18, run);
+      for (const side of [-1, 1]) {
+        const plane = new THREE.Group();
+        plane.name = `${name}_${side < 0 ? "Left" : "Right"}Assembly`;
+        plane.position.set(x + side * run / 2, eave + rise / 2 + .08, z);
+        plane.rotation.z = side < 0 ? pitch : -pitch;
+        group.add(plane);
+        box(
+          [slope, .16, depth + .85],
+          [0, 0, 0],
+          material,
+          `${name}_${side < 0 ? "Left" : "Right"}Plane`,
+          plane
+        );
+        if (seams) {
+          for (let seam = -Math.floor(depth / .7); seam <= Math.floor(depth / .7); seam++) {
+            box(
+              [slope * .98, .035, .028],
+              [0, .105, seam * .7],
+              mat.blackMetal,
+              `${name}_StandingSeam`,
+              plane,
+              { castShadow: false }
+            );
+          }
+        }
+      }
+      box([.14, .18, depth + 1.0], [x, eave + rise + .14, z], mat.blackMetal, `${name}_Ridge`, group);
+      return group;
+    }
+
+    function sideGableRoof({ x, z, eave, width, depth, rise, material, name, parent = residence }) {
+      const group = new THREE.Group();
+      group.name = name;
+      parent.add(group);
+      const run = depth / 2 + .5;
+      const slope = Math.hypot(run, rise);
+      const pitch = Math.atan2(rise, run);
+      for (const side of [-1, 1]) {
+        const plane = new THREE.Group();
+        plane.name = `${name}_${side < 0 ? "Rear" : "Front"}Assembly`;
+        plane.position.set(x, eave + rise / 2, z + side * run / 2);
+        plane.rotation.x = side > 0 ? pitch : -pitch;
+        group.add(plane);
+        box(
+          [width + 1.0, .16, slope],
+          [0, 0, 0],
+          material,
+          `${name}_${side < 0 ? "Rear" : "Front"}Plane`,
+          plane
+        );
+        for (let seam = -Math.floor(width / .75); seam <= Math.floor(width / .75); seam++) {
+          box(
+            [.026, .035, slope * .98],
+            [seam * .75, .105, 0],
+            mat.blackMetal,
+            `${name}_StandingSeam`,
+            plane,
+            { castShadow: false }
+          );
+        }
+      }
+      box([width + 1.1, .18, .14], [x, eave + rise + .11, z], mat.blackMetal, `${name}_Ridge`, group);
+      return group;
+    }
+
+    function revealFrame({ x, bottom, w, h, z, material, name, parent = residence }) {
+      const group = new THREE.Group();
+      group.name = `${name}_DeepReveal`;
+      parent.add(group);
+      const depth = .34;
+      const thickness = .095;
+      box([thickness, h, depth], [x - w / 2 + thickness / 2, bottom + h / 2, z - depth / 2], material, `${name}_RevealL`, group);
+      box([thickness, h, depth], [x + w / 2 - thickness / 2, bottom + h / 2, z - depth / 2], material, `${name}_RevealR`, group);
+      box([w, thickness, depth], [x, bottom + thickness / 2, z - depth / 2], material, `${name}_RevealSill`, group);
+      box([w, thickness, depth], [x, bottom + h - thickness / 2, z - depth / 2], material, `${name}_RevealHead`, group);
+      return group;
+    }
+
+    function windowUnit({ x, bottom, w, h, z, columns = 2, rows = 2, arched = false, name, trim = mat.whiteTrim, parent = residence }) {
+      const group = new THREE.Group();
+      group.name = name;
+      parent.add(group);
+      revealFrame({ x, bottom, w, h, z, material: mat.blackMetal, name, parent: group });
+      box([w - .17, h - .17, .055], [x, bottom + h / 2, z - .24], mat.warmInterior, `${name}_Interior`, group, { castShadow: false });
+      box([.24, h - .26, .025], [x - w / 2 + .21, bottom + h / 2, z - .2], mat.curtain, `${name}_CurtainL`, group, { castShadow: false });
+      box([.24, h - .26, .025], [x + w / 2 - .21, bottom + h / 2, z - .2], mat.curtain, `${name}_CurtainR`, group, { castShadow: false });
+      box([w - .18, h - .18, .028], [x, bottom + h / 2, z + .012], mat.glass, `${name}_Glass`, group, { castShadow: false });
+
+      const trimWidth = .13;
+      box([trimWidth, h + .3, .11], [x - w / 2 - .07, bottom + h / 2, z + .085], trim, `${name}_OuterL`, group);
+      box([trimWidth, h + .3, .11], [x + w / 2 + .07, bottom + h / 2, z + .085], trim, `${name}_OuterR`, group);
+      box([w + .27, trimWidth, .11], [x, bottom - .07, z + .085], trim, `${name}_OuterBottom`, group);
+      if (!arched) {
+        box([w + .27, trimWidth, .11], [x, bottom + h + .07, z + .085], trim, `${name}_OuterTop`, group);
+      } else {
+        const points = [];
+        for (let i = 0; i <= 18; i++) {
+          const t = i / 18;
+          const px = x - w / 2 - .07 + t * (w + .14);
+          const py = bottom + h + .01 + Math.sin(t * Math.PI) * .23;
+          points.push(new THREE.Vector3(px, py, z + .12));
+        }
+        const curve = new THREE.CatmullRomCurve3(points);
+        const geometry = new THREE.TubeGeometry(curve, 40, .07, 8, false);
+        const header = meshFrom(geometry, trim, `${name}_ArchedHeader`, group);
+        header.castShadow = true;
+      }
+      for (let column = 1; column < columns; column++) {
+        const px = x - w / 2 + (w * column / columns);
+        box([.045, h - .2, .04], [px, bottom + h / 2, z + .055], mat.blackMetal, `${name}_MullionV`, group);
+      }
+      for (let row = 1; row < rows; row++) {
+        const py = bottom + h * row / rows;
+        box([w - .2, .045, .04], [x, py, z + .055], mat.blackMetal, `${name}_MullionH`, group);
+      }
+      box([w + .42, .12, .36], [x, bottom - .18, z + .02], mat.terrazzo, `${name}_ProjectingSill`, group);
+      return group;
+    }
+
+    function planter(x, z, width = 1.4) {
+      const group = new THREE.Group();
+      group.name = "ArchitecturalPlanter";
+      residence.add(group);
+      box([width, .42, .62], [x, .35, z], mat.basalt, "PlanterWall", group);
+      box([width - .12, .12, .51], [x, .58, z], mat.soil, "PlanterSoil", group, { castShadow: false });
+      return group;
+    }
+
+    // Ground, plinth and site.
+    box([42, .28, 36], [0, -.18, 0], mat.lawn, "Landform", scene, { castShadow: false });
+    box([17.2, .55, 8.1], [0, .275, -1.0], mat.basalt, "ContinuousStonePlinth", residence);
+    box([17.7, .11, 8.55], [0, .58, -1.0], mat.blackMetal, "PlinthShadowGap", residence);
+
+    // Main two-storey volume.
+    wallWithOpenings({
+      x: 0, bottom: .62, width: 13.7, height: 5.62, front: 1.65, depth: .38,
+      material: mat.charcoal, name: "MainFacade",
+      openings: [
+        { x: -5.7, y: .85, w: 1.18, h: 2.0 },
+        { x: 5.85, y: .82, w: 1.25, h: 2.08 },
+        { x: 5.85, y: 3.35, w: 1.25, h: 1.55 }
+      ]
+    });
+    box([13.7, 5.62, .38], [0, 3.43, -4.47], mat.charcoal, "MainRearWall", residence);
+    box([.38, 5.62, 6.5], [-6.66, 3.43, -1.41], mat.charcoal, "MainLeftWall", residence);
+    box([.38, 5.62, 6.5], [6.66, 3.43, -1.41], mat.charcoal, "MainRightWall", residence);
+    sideGableRoof({ x: 0, z: -1.4, eave: 6.24, width: 13.7, depth: 6.55, rise: 2.25, material: mat.metalRoof, name: "MainLongRoof" });
+
+    windowUnit({ x: -5.7, bottom: 1.47, w: 1.18, h: 2.0, z: 1.67, columns: 2, rows: 3, name: "MainLeftWindow", trim: mat.warmWhite });
+    windowUnit({ x: 5.85, bottom: 1.44, w: 1.25, h: 2.08, z: 1.67, columns: 2, rows: 3, name: "MainRightLowerWindow", trim: mat.warmWhite });
+    windowUnit({ x: 5.85, bottom: 3.97, w: 1.25, h: 1.55, z: 1.67, columns: 2, rows: 2, name: "MainRightUpperWindow", trim: mat.warmWhite });
+
+    // Dominant projecting cedar gable.
+    const cedarOpenings = [
+      { x: 0, y: .78, w: 2.05, h: 2.22 },
+      { x: 0, y: 3.34, w: 1.65, h: 1.75 }
+    ];
+    wallWithOpenings({
+      x: 2.55, bottom: .62, width: 5.25, height: 5.48, front: 3.54, depth: .42,
+      material: mat.cedar, name: "CedarGableFacade", openings: cedarOpenings
+    });
+    box([.36, 5.48, 6.8], [.105, 3.36, .15], mat.cedar, "CedarGableLeftWall", residence);
+    box([.36, 5.48, 6.8], [4.995, 3.36, .15], mat.cedar, "CedarGableRightWall", residence);
+    gableFace({ x: 2.55, eave: 6.1, width: 5.25, rise: 2.15, front: 3.54, depth: .42, material: mat.cedar, name: "CedarGableFace" });
+    frontGableRoof({ x: 2.55, z: .13, eave: 6.1, width: 5.25, depth: 6.8, rise: 2.15, material: mat.slate, name: "CedarGableRoof", seams: false });
+    windowUnit({ x: 2.55, bottom: 1.4, w: 2.05, h: 2.22, z: 3.56, columns: 3, rows: 3, arched: true, name: "CedarLowerWindow" });
+    windowUnit({ x: 2.55, bottom: 3.96, w: 1.65, h: 1.75, z: 3.56, columns: 2, rows: 3, arched: true, name: "CedarUpperWindow" });
+
+    // Dark stair tower with offset glazing and deep entry.
+    const towerX = -2.05;
+    wallWithOpenings({
+      x: towerX, bottom: .62, width: 4.42, height: 5.05, front: 3.13, depth: .42,
+      material: mat.charcoal, name: "StairTowerFacade",
+      openings: [
+        { x: .82, y: .43, w: 1.48, h: 2.72 },
+        { x: -.55, y: 3.18, w: 1.42, h: 1.55 }
+      ]
+    });
+    box([.36, 5.05, 6.2], [-4.08, 3.145, .25], mat.charcoal, "TowerLeftWall", residence);
+    box([.36, 5.05, 6.2], [-.02, 3.145, .25], mat.charcoal, "TowerRightWall", residence);
+    gableFace({ x: towerX, eave: 5.67, width: 4.42, rise: 1.92, front: 3.13, depth: .42, material: mat.charcoal, name: "TowerGableFace" });
+    frontGableRoof({ x: towerX, z: .28, eave: 5.67, width: 4.42, depth: 6.3, rise: 1.92, material: mat.metalRoof, name: "TowerRoof" });
+    windowUnit({ x: towerX - .55, bottom: 3.8, w: 1.42, h: 1.55, z: 3.15, columns: 2, rows: 2, arched: true, name: "TowerUpperWindow" });
+
+    // Recessed front door, sidelight and transom.
+    const doorX = towerX + .82;
+    const entryGroup = new THREE.Group();
+    entryGroup.name = "RecessedEntryAssembly";
+    residence.add(entryGroup);
+    box([1.47, 2.73, .04], [doorX, 2.405, 2.77], mat.warmInterior, "EntryInteriorVoid", entryGroup, { castShadow: false });
+    revealFrame({ x: doorX, bottom: 1.05, w: 1.48, h: 2.72, z: 3.15, material: mat.timber, name: "FrontDoor", parent: entryGroup });
+    const doorPivot = new THREE.Group();
+    doorPivot.name = "FrontDoorHinge";
+    doorPivot.position.set(doorX - .57, 1.12, 3.21);
+    entryGroup.add(doorPivot);
+    const doorSlab = box([1.14, 2.28, .11], [.57, 1.14, 0], mat.timber, "SolidWalnutDoor", doorPivot);
+    box([.62, 1.38, .025], [.57, 1.35, .069], mat.glass, "DoorGlassPanel", doorPivot, { castShadow: false });
+    box([.045, 1.42, .035], [.57, 1.35, .09], mat.blackMetal, "DoorGlassVertical", doorPivot);
+    for (let row = 0; row < 4; row++) {
+      box([.66, .035, .035], [.57, .77 + row * .38, .09], mat.blackMetal, "DoorGlassHorizontal", doorPivot);
+    }
+    cylinder(.065, .09, [1.0, 1.09, .1], mat.bronze, "DoorLever", doorPivot, { rotation: [Math.PI / 2, 0, 0] });
+    box([.18, 2.3, .09], [doorX + .65, 2.25, 3.23], mat.glass, "EntrySidelight", entryGroup, { castShadow: false });
+    for (let row = 0; row < 5; row++) {
+      box([.21, .026, .035], [doorX + .65, 1.2 + row * .46, 3.27], mat.blackMetal, "SidelightRail", entryGroup);
+    }
+    box([1.36, .3, .055], [doorX, 3.58, 3.23], mat.glass, "EntryTransom", entryGroup, { castShadow: false });
+    box([1.62, .12, .14], [doorX, 3.83, 3.23], mat.whiteTrim, "EntryHeader", entryGroup);
+
+    // Monumental entry portal, canopy, and steps.
+    box([.32, 2.96, .42], [doorX - 1.04, 2.3, 3.55], mat.terrazzo, "EntryPierLeft", residence);
+    box([.32, 2.96, .42], [doorX + 1.04, 2.3, 3.55], mat.terrazzo, "EntryPierRight", residence);
+    box([2.42, .3, .62], [doorX, 3.78, 3.56], mat.terrazzo, "EntryPortalBeam", residence);
+    box([2.7, .14, 1.34], [doorX, 3.96, 3.96], mat.metalRoof, "FloatingEntryCanopy", residence, { rotation: [-.055, 0, 0] });
+    for (let seam = -3; seam <= 3; seam++) {
+      box([.026, .04, 1.29], [doorX + seam * .38, 4.04, 3.96], mat.blackMetal, "CanopySeam", residence, { rotation: [-.055, 0, 0] });
+    }
+    box([2.32, .18, 1.05], [doorX, .73, 4.02], mat.terrazzo, "EntryLanding", residence);
+    box([2.75, .17, .72], [doorX, .49, 4.35], mat.concrete, "EntryStepLower", residence);
+    box([2.52, .17, .78], [doorX, .65, 4.19], mat.concrete, "EntryStepUpper", residence);
+
+    // Left single-storey stone pavilion.
+    const pavilionX = -5.82;
+    wallWithOpenings({
+      x: pavilionX, bottom: .62, width: 3.72, height: 2.75, front: 4.08, depth: .4,
+      material: mat.basalt, name: "StonePavilionFacade",
+      openings: [{ x: 0, y: .43, w: 2.45, h: 1.78 }]
+    });
+    box([.35, 2.75, 4.55], [pavilionX - 1.685, 1.995, 1.99], mat.basalt, "PavilionLeftWall", residence);
+    box([.35, 2.75, 4.55], [pavilionX + 1.685, 1.995, 1.99], mat.basalt, "PavilionRightWall", residence);
+    gableFace({ x: pavilionX, eave: 3.37, width: 3.72, rise: 1.35, front: 4.08, depth: .4, material: mat.warmWhite, name: "PavilionGableFace" });
+    frontGableRoof({ x: pavilionX, z: 2.0, eave: 3.37, width: 3.72, depth: 4.6, rise: 1.35, material: mat.metalRoof, name: "PavilionRoof" });
+    windowUnit({ x: pavilionX, bottom: 1.05, w: 2.45, h: 1.78, z: 4.1, columns: 4, rows: 3, name: "PavilionPictureWindow" });
+
+    // Roof fascia, rainwater handling, and chimney.
+    for (const [x, y, z, width, angle] of [
+      [2.55, 6.12, 3.98, 5.92, 0],
+      [-2.05, 5.69, 3.54, 5.05, 0],
+      [-5.82, 3.39, 4.5, 4.25, 0]
+    ]) {
+      box([width, .24, .17], [x, y, z], mat.warmWhite, "DeepEaveFascia", residence, { rotation: [0, angle, 0] });
+      box([width, .105, .18], [x, y - .16, z + .06], mat.blackMetal, "HalfRoundGutter", residence);
+    }
+    cylinder(.07, 4.65, [5.28, 3.0, 3.7], mat.blackMetal, "CopperDownpipe", residence);
+    cylinder(.095, .3, [5.28, .74, 3.92], mat.blackMetal, "DownpipeShoe", residence, { rotation: [Math.PI / 2, 0, 0] });
+    box([1.12, 2.2, .86], [4.65, 7.28, -1.7], mat.basalt, "StoneChimney", residence);
+    box([1.3, .18, 1.03], [4.65, 8.42, -1.7], mat.terrazzo, "ChimneyCap", residence);
+    box([.6, .28, .4], [4.65, 8.64, -1.7], mat.blackMetal, "ChimneyFlue", residence);
+
+    // Fine architectural details.
+    box([.72, .32, .045], [doorX - 1.02, 2.82, 3.8], mat.blackMetal, "AddressPlaque", residence);
+    const addressCanvas = document.createElement("canvas");
+    addressCanvas.width = 256;
+    addressCanvas.height = 96;
+    const addressCtx = addressCanvas.getContext("2d");
+    addressCtx.fillStyle = "#101617";
+    addressCtx.fillRect(0, 0, 256, 96);
+    addressCtx.fillStyle = "#e7c48f";
+    addressCtx.font = "600 48px sans-serif";
+    addressCtx.textAlign = "center";
+    addressCtx.textBaseline = "middle";
+    addressCtx.fillText("27", 128, 50);
+    const addressTexture = new THREE.CanvasTexture(addressCanvas);
+    addressTexture.colorSpace = THREE.SRGBColorSpace;
+    textures.push(addressTexture);
+    const addressMaterial = new THREE.MeshBasicMaterial({ map: addressTexture });
+    materials.push(addressMaterial);
+    box([.62, .23, .01], [doorX - 1.02, 2.82, 3.828], addressMaterial, "HouseNumber27", residence, { castShadow: false });
+
+    function wallSconce(x, y, z, parent = residence) {
+      const group = new THREE.Group();
+      group.name = "ArchitecturalWallSconce";
+      parent.add(group);
+      box([.09, .46, .08], [x, y, z], mat.blackMetal, "SconceBackplate", group);
+      box([.22, .3, .16], [x, y, z + .1], mat.warmInterior, "SconceGlow", group, { castShadow: false });
+      box([.25, .04, .2], [x, y + .17, z + .1], mat.blackMetal, "SconceCap", group);
+      box([.25, .04, .2], [x, y - .17, z + .1], mat.blackMetal, "SconceBase", group);
+      box([.035, .3, .2], [x - .11, y, z + .1], mat.blackMetal, "SconceSideL", group);
+      box([.035, .3, .2], [x + .11, y, z + .1], mat.blackMetal, "SconceSideR", group);
+      return group;
+    }
+    wallSconce(doorX - .87, 2.95, 3.79);
+    wallSconce(doorX + .87, 2.95, 3.79);
+    wallSconce(4.35, 2.55, 3.8);
+
+    // Curved approach path.
+    const pathShape = new THREE.Shape();
+    pathShape.moveTo(-4.7, -16);
+    pathShape.bezierCurveTo(-4.4, -11, -2.2, -7.1, doorX - 1.35, -4.5);
+    pathShape.lineTo(doorX + 1.35, -4.5);
+    pathShape.bezierCurveTo(-.2, -7.2, -1.5, -11.4, -1.15, -16);
+    pathShape.closePath();
+    const pathGeometry = new THREE.ShapeGeometry(pathShape, 32);
+    const path = meshFrom(pathGeometry, mat.concrete, "CurvedEntryWalk", scene);
+    path.rotation.x = -Math.PI / 2;
+    path.position.y = .005;
+    path.receiveShadow = true;
+
+    // Linear reflecting pool and bench establish a modern foreground.
+    box([5.2, .34, 2.0], [5.55, .12, 7.6], mat.basalt, "ReflectingPoolBasin", scene);
+    box([4.7, .08, 1.52], [5.55, .32, 7.6], mat.water, "ReflectingPoolWater", scene, { castShadow: false });
+    for (const z of [6.72, 8.48]) {
+      box([5.3, .13, .16], [5.55, .38, z], mat.terrazzo, "PoolCoping", scene);
+    }
+    for (const x of [3.0, 8.1]) {
+      box([.16, .13, 1.65], [x, .38, 7.6], mat.terrazzo, "PoolCoping", scene);
+    }
+    box([2.8, .15, .62], [8.4, .75, 4.85], mat.timber, "GardenBenchSeat", scene);
+    box([.14, .58, .45], [7.3, .47, 4.85], mat.blackMetal, "BenchLeg", scene);
+    box([.14, .58, .45], [9.5, .47, 4.85], mat.blackMetal, "BenchLeg", scene);
+
+    // Planting beds and planters.
+    box([4.0, .08, 1.25], [3.0, .16, 5.25], mat.soil, "CedarFacadePlantingBed", scene, { castShadow: false });
+    box([3.4, .08, 1.15], [-6.05, .16, 5.22], mat.soil, "PavilionPlantingBed", scene, { castShadow: false });
+    planter(-3.65, 4.65, 1.45);
+    planter(.2, 4.65, 1.45);
+
+    const shrubPositions = [
+      [-6.9, .66, 5.1, 1.0], [-5.35, .62, 5.28, .75], [-4.25, .62, 5.0, .6],
+      [1.1, .6, 5.25, .68], [2.0, .64, 5.38, .85], [3.35, .58, 5.3, .6],
+      [4.15, .7, 5.08, .9], [-3.65, .86, 4.66, .58], [.2, .87, 4.66, .58],
+      [2.4, .55, 7.55, .55], [8.7, .55, 6.55, .65], [8.75, .52, 8.55, .58]
+    ];
+    const shrubGeometry = new THREE.IcosahedronGeometry(1, 2);
+    geometries.add(shrubGeometry);
+    const shrubMesh = new THREE.InstancedMesh(shrubGeometry, mat.leafDark, shrubPositions.length * 3);
+    shrubMesh.name = "InstancedLayeredShrubs";
+    shrubMesh.castShadow = true;
+    shrubMesh.receiveShadow = true;
+    const dummy = new THREE.Object3D();
+    let shrubIndex = 0;
+    for (const [x, y, z, scale] of shrubPositions) {
+      for (let layer = 0; layer < 3; layer++) {
+        dummy.position.set(x + (layer - 1) * scale * .38, y + (layer === 1 ? .23 : 0), z + (layer % 2 ? .08 : -.05));
+        dummy.scale.set(scale * .62, scale * (.68 + layer * .08), scale * .58);
+        dummy.rotation.set(0, layer * 1.4, 0);
+        dummy.updateMatrix();
+        shrubMesh.setMatrixAt(shrubIndex++, dummy.matrix);
+      }
+    }
+    shrubMesh.instanceMatrix.needsUpdate = true;
+    scene.add(shrubMesh);
+
+    // Ornamental grasses use instancing.
+    const grassBladeGeometry = new THREE.ConeGeometry(.055, .82, 5);
+    geometries.add(grassBladeGeometry);
+    const grassMaterial = standard({ color: 0x9a9d5b, roughness: .95 });
+    const grassCount = 150;
+    const grass = new THREE.InstancedMesh(grassBladeGeometry, grassMaterial, grassCount);
+    grass.name = "InstancedOrnamentalGrasses";
+    grass.castShadow = true;
+    const grassRandom = seeded(101);
+    for (let index = 0; index < grassCount; index++) {
+      const cluster = index % 3;
+      const baseX = cluster === 0 ? 7.6 : cluster === 1 ? -7.3 : 4.8;
+      const baseZ = cluster === 0 ? 5.45 : cluster === 1 ? 6.0 : 8.9;
+      const radius = grassRandom() * (cluster === 2 ? 2.3 : 1.2);
+      const angle = grassRandom() * Math.PI * 2;
+      dummy.position.set(baseX + Math.cos(angle) * radius, .48, baseZ + Math.sin(angle) * radius);
+      const scale = .65 + grassRandom() * .75;
+      dummy.scale.set(scale, scale, scale);
+      dummy.rotation.set((grassRandom() - .5) * .18, grassRandom() * Math.PI, (grassRandom() - .5) * .18);
+      dummy.updateMatrix();
+      grass.setMatrixAt(index, dummy.matrix);
+    }
+    grass.instanceMatrix.needsUpdate = true;
+    scene.add(grass);
+
+    // Sculptural birch tree.
+    const tree = new THREE.Group();
+    tree.name = "ForegroundBirch";
+    tree.position.set(-9.0, 0, 5.9);
+    scene.add(tree);
+    const paleBark = standard({ color: 0xb9afa0, roughness: .9 });
+    cylinder(.23, 5.2, [0, 2.65, 0], paleBark, "BirchTrunk", tree);
+    for (const branch of [
+      [-.45, 4.1, 0, .1, 2.6, .42], [.48, 3.65, .08, .09, 2.4, -.5],
+      [-.3, 2.9, -.05, .075, 2.0, .55]
+    ]) {
+      const [x, y, z, radius, length, tilt] = branch;
+      cylinder(radius, length, [x, y, z], paleBark, "BirchBranch", tree, { rotation: [0, 0, tilt] });
+    }
+    const treeCanopies = [
+      [-1.15, 5.4, 0, 1.55], [.2, 5.7, 0, 1.7], [1.25, 5.15, .1, 1.4],
+      [-.35, 6.55, -.15, 1.3], [-1.5, 4.55, .15, 1.15], [.8, 4.4, .1, 1.2]
+    ];
+    for (let i = 0; i < treeCanopies.length; i++) {
+      const [x, y, z, scale] = treeCanopies[i];
+      const canopy = new THREE.Mesh(unitSphere, i % 2 ? mat.leafLight : mat.leafDark);
+      canopy.name = "BirchCanopy";
+      canopy.position.set(x, y, z);
+      canopy.scale.set(scale, scale * .78, scale);
+      canopy.rotation.set(i * .3, i * .7, 0);
+      canopy.castShadow = true;
+      canopy.receiveShadow = true;
+      tree.add(canopy);
+    }
+
+    // Background conifers are two instanced draw calls.
+    const pinePositions = [
+      [-17, -8, 8], [-13, -10, 11], [-8, -12, 9], [9, -13, 11],
+      [14, -10, 9], [18, -6, 10], [12, 2, 8], [-14, 1, 7]
+    ];
+    const pineTrunks = new THREE.InstancedMesh(unitCylinder, mat.bark, pinePositions.length);
+    pineTrunks.name = "InstancedPineTrunks";
+    const pineConeGeometry = new THREE.ConeGeometry(1, 1, 12);
+    geometries.add(pineConeGeometry);
+    const pineCrowns = new THREE.InstancedMesh(pineConeGeometry, mat.leafDark, pinePositions.length * 3);
+    pineCrowns.name = "InstancedPineCrowns";
+    let crownIndex = 0;
+    pinePositions.forEach(([x, z, height], index) => {
+      dummy.position.set(x, height * .27, z);
+      dummy.scale.set(.22, height * .54, .22);
+      dummy.updateMatrix();
+      pineTrunks.setMatrixAt(index, dummy.matrix);
+      for (let tier = 0; tier < 3; tier++) {
+        dummy.position.set(x, height * (.48 + tier * .16), z);
+        dummy.scale.set(height * (.2 - tier * .035), height * .38, height * (.2 - tier * .035));
+        dummy.rotation.set(0, tier * .7 + index, 0);
+        dummy.updateMatrix();
+        pineCrowns.setMatrixAt(crownIndex++, dummy.matrix);
+      }
+    });
+    pineTrunks.instanceMatrix.needsUpdate = true;
+    pineCrowns.instanceMatrix.needsUpdate = true;
+    pineTrunks.castShadow = pineCrowns.castShadow = true;
+    pineTrunks.receiveShadow = pineCrowns.receiveShadow = true;
+    scene.add(pineTrunks, pineCrowns);
+
+    // Boulders add irregular foreground scale cues.
+    const boulderGeometry = new THREE.DodecahedronGeometry(1, 1);
+    geometries.add(boulderGeometry);
+    const boulders = [
+      [-8.1, .45, 8.3, 1.1], [-7.1, .32, 8.7, .7], [9.8, .42, 9.7, 1.0],
+      [10.6, .28, 8.9, .62], [2.0, .22, 9.4, .48]
+    ];
+    boulders.forEach(([x, y, z, scale], index) => {
+      const rock = new THREE.Mesh(boulderGeometry, mat.basalt);
+      rock.name = "LandscapeBoulder";
+      rock.position.set(x, y, z);
+      rock.scale.set(scale, scale * (.55 + index * .04), scale * .82);
+      rock.rotation.set(index * .3, index * .8, index * .17);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      scene.add(rock);
+    });
+
+    // Low detail extras may be toggled for a cleaner massing view.
+    const details = new THREE.Group();
+    details.name = "OptionalMicroDetails";
+    residence.add(details);
+    for (let i = 0; i < 18; i++) {
+      const x = -6.35 + (i % 6) * .25;
+      const y = 1.0 + Math.floor(i / 6) * .22;
+      box([.17, .08, .035], [x, y, 4.31], i % 3 ? mat.basalt : mat.terrazzo, "FeatureStoneRelief", details);
+    }
+    for (let i = 0; i < 9; i++) {
+      box([.026, 1.65, .04], [1.85 + i * .18, 4.84, 3.82], mat.warmWhite, "CedarScreenBatten", details);
+    }
+
+    // Fake soft contact shadow beneath the architecture.
+    const shadowCanvas = document.createElement("canvas");
+    shadowCanvas.width = shadowCanvas.height = 256;
+    const shadowCtx = shadowCanvas.getContext("2d");
+    const shadowGradient = shadowCtx.createRadialGradient(128, 128, 12, 128, 128, 125);
+    shadowGradient.addColorStop(0, "rgba(0,0,0,.42)");
+    shadowGradient.addColorStop(.62, "rgba(0,0,0,.19)");
+    shadowGradient.addColorStop(1, "rgba(0,0,0,0)");
+    shadowCtx.fillStyle = shadowGradient;
+    shadowCtx.fillRect(0, 0, 256, 256);
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    textures.push(shadowTexture);
+    const shadowMaterial = new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false });
+    materials.push(shadowMaterial);
+    const contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(19, 12), shadowMaterial);
+    geometries.add(contactShadow.geometry);
+    contactShadow.name = "BakedContactShadow";
+    contactShadow.rotation.x = -Math.PI / 2;
+    contactShadow.position.set(0, .01, -.8);
+    scene.add(contactShadow);
+
+    const views = [
+      { name: "Hero", position: new THREE.Vector3(18.5, 10.6, 23.5), target: new THREE.Vector3(-.4, 3.25, .9) },
+      { name: "Entry", position: new THREE.Vector3(-6.2, 4.25, 11.2), target: new THREE.Vector3(-1.2, 2.3, 3.1) },
+      { name: "Gables", position: new THREE.Vector3(12.5, 9.8, 14.8), target: new THREE.Vector3(1.2, 5.2, .7) },
+      { name: "Pool", position: new THREE.Vector3(13.7, 4.8, 12.0), target: new THREE.Vector3(4.2, 2.3, 2.4) },
+      { name: "Massing", position: new THREE.Vector3(-18, 14, 18), target: new THREE.Vector3(-.2, 3.4, -.4) }
+    ];
+    let viewIndex = 0;
+    let cameraBlend = 0;
+    const cameraStart = new THREE.Vector3();
+    const targetStart = new THREE.Vector3();
+
+    function selectView(index) {
+      viewIndex = index % views.length;
+      cameraStart.copy(camera.position);
+      targetStart.copy(controls.target);
+      cameraBlend = 1;
+      document.querySelector("#viewButton").textContent = `View · ${views[viewIndex].name}`;
+    }
+
+    const viewButton = document.querySelector("#viewButton");
+    const doorButton = document.querySelector("#doorButton");
+    const timeButton = document.querySelector("#timeButton");
+    const orbitButton = document.querySelector("#orbitButton");
+    const detailButton = document.querySelector("#detailButton");
+    let doorTarget = 0;
+    let nightTarget = 0;
+
+    viewButton.addEventListener("click", () => selectView(viewIndex + 1));
+    doorButton.addEventListener("click", () => {
+      doorTarget = doorTarget ? 0 : 1;
+      doorButton.textContent = doorTarget ? "Close entry" : "Open entry";
+      doorButton.classList.toggle("active", Boolean(doorTarget));
+    });
+    timeButton.addEventListener("click", () => {
+      nightTarget = nightTarget ? 0 : 1;
+      timeButton.textContent = nightTarget ? "Day mode" : "Night mode";
+      timeButton.classList.toggle("active", Boolean(nightTarget));
+    });
+    orbitButton.addEventListener("click", () => {
+      controls.autoRotate = !controls.autoRotate;
+      controls.autoRotateSpeed = .55;
+      orbitButton.classList.toggle("active", controls.autoRotate);
+    });
+    detailButton.addEventListener("click", () => {
+      details.visible = !details.visible;
+      detailButton.textContent = details.visible ? "Details on" : "Details off";
+      detailButton.classList.toggle("active", details.visible);
+    });
+    detailButton.classList.add("active");
+
+    const dayBackground = new THREE.Color(0xa8c2d0);
+    const nightBackground = new THREE.Color(0x101923);
+    const dayFog = new THREE.Color(0xa8c2d0);
+    const nightFog = new THREE.Color(0x101923);
+    const daySun = new THREE.Color(0xfff1d3);
+    const nightSun = new THREE.Color(0x7186ad);
+    const clock = new THREE.Clock();
+
+    function damp(current, target, lambda, delta) {
+      return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * delta));
+    }
+
+    function animate() {
+      const delta = Math.min(clock.getDelta(), .05);
+      animated.door = damp(animated.door, doorTarget, 5.2, delta);
+      animated.night = damp(animated.night, nightTarget, 2.1, delta);
+      doorPivot.rotation.y = -animated.door * Math.PI * .47;
+
+      const n = animated.night;
+      scene.background.copy(dayBackground).lerp(nightBackground, n);
+      scene.fog.color.copy(dayFog).lerp(nightFog, n);
+      sun.color.copy(daySun).lerp(nightSun, n);
+      sun.intensity = THREE.MathUtils.lerp(4.0, .16, n);
+      ambient.intensity = THREE.MathUtils.lerp(1.75, .35, n);
+      entryLight.intensity = THREE.MathUtils.lerp(0, 48, n);
+      mat.warmInterior.emissiveIntensity = THREE.MathUtils.lerp(.22, 2.8, n);
+      renderer.toneMappingExposure = THREE.MathUtils.lerp(1.08, .92, n);
+
+      if (cameraBlend > .001) {
+        cameraBlend = damp(cameraBlend, 0, 3.2, delta);
+        const eased = 1 - cameraBlend;
+        const smooth = eased * eased * (3 - 2 * eased);
+        camera.position.lerpVectors(cameraStart, views[viewIndex].position, smooth);
+        controls.target.lerpVectors(targetStart, views[viewIndex].target, smooth);
+      }
+      controls.update(delta);
+      renderer.render(scene, camera);
+    }
+    renderer.setAnimationLoop(animate);
+
+    function resize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.5 : 2));
+    }
+    addEventListener("resize", resize);
+
+    function disposeScene() {
+      renderer.setAnimationLoop(null);
+      controls.dispose();
+      for (const geometry of geometries) geometry.dispose();
+      for (const material of materials) material.dispose();
+      for (const texture of textures) texture.dispose();
+      scene.environment?.dispose();
+      renderer.dispose();
+    }
+    addEventListener("pagehide", disposeScene, { once: true });
+  </script>
+</body>
+</html>

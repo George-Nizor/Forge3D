@@ -1,0 +1,25 @@
+# Copy this file to config.toml and replace the placeholders. Keep config.toml
+# local because it contains absolute paths for one workstation.
+
+[mcp_servers.blender]
+command = '<UVX_EXECUTABLE>'
+args = ["--python", "3.11", "--from", "blender-mcp==1.6.5", "blender-mcp"]
+startup_timeout_sec = 120
+tool_timeout_sec = 240
+
+[mcp_servers.blender.env]
+BLENDER_HOST = "127.0.0.1"
+BLENDER_PORT = "9876"
+DISABLE_TELEMETRY = "true"
+UV_PYTHON_PREFERENCE = "only-managed"
+
+[mcp_servers.godot]
+command = 'C:\Windows\System32\cmd.exe'
+args = ["/c", "npx", "-y", "@npgamedev/godot-mcp-server@1.0.0"]
+cwd = '<FORGE3D_GODOT_PROJECT>'
+startup_timeout_sec = 120
+tool_timeout_sec = 240
+
+[mcp_servers.godot.env]
+GODOT_MCP_CONFIG_VERSION = "1"
+GODOT_MCP_PROJECT_PATH = '<FORGE3D_GODOT_PROJECT>'

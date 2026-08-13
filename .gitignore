@@ -1,0 +1,28 @@
+**/.venv/
+**/node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.forge3d/
+output/
+dist/
+build/
+*.egg-info/
+.godot/
+godot/.godot/
+godot/reports/
+vendor/models/
+.tmp/
+*.tmp
+*.log
+*.blend1
+*.blend2
+.DS_Store
+Thumbs.db
+
+# Per-machine Codex MCP paths. See .codex/config.toml.example.
+.codex/config.toml
+
+# Godot-generated import metadata.
+*.import

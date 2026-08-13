@@ -1,0 +1,7 @@
+interface:
+  display_name: "Forge3D"
+  short_description: "Build and refine game-ready 3D assets"
+  default_prompt: "Use $forge3d to create a polished game-ready 3D asset and validate it in Blender and Godot."
+
+policy:
+  allow_implicit_invocation: true

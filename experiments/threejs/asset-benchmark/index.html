@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A procedural Three.js hard-surface asset benchmark for Forge3D."
+    />
+    <title>Forge3D · Three.js Asset Benchmark</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="viewport" aria-label="Interactive 3D viewport"></canvas>
+
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">FORGE3D / THREE.JS BENCHMARK 01</p>
+          <h1>Aegis M4</h1>
+          <p class="subtitle">Autonomous sentry drone · procedural runtime asset</p>
+        </div>
+        <div class="status"><span></span> LIVE WEBGL</div>
+      </header>
+
+      <aside class="spec-panel glass">
+        <p class="panel-label">Asset profile</p>
+        <dl>
+          <div><dt>CLASS</dt><dd>SENTRY / RECON</dd></div>
+          <div><dt>SPAN</dt><dd>2.6 m</dd></div>
+          <div><dt>POWER</dt><dd>DUAL ION</dd></div>
+          <div><dt>STATE</dt><dd id="asset-state">PATROL</dd></div>
+        </dl>
+        <div class="power-meter"><i></i></div>
+      </aside>
+
+      <aside class="metrics glass">
+        <p class="panel-label">Renderer</p>
+        <div class="metric-row"><span>TRIANGLES</span><strong id="triangles">—</strong></div>
+        <div class="metric-row"><span>DRAW CALLS</span><strong id="draw-calls">—</strong></div>
+        <div class="metric-row"><span>GEOMETRIES</span><strong id="geometries">—</strong></div>
+        <div class="metric-row"><span>MATERIALS</span><strong id="materials">—</strong></div>
+      </aside>
+
+      <nav class="toolbar glass" aria-label="Asset controls">
+        <button type="button" data-action="rotate" class="active">
+          <span>01</span> AUTO ORBIT
+        </button>
+        <button type="button" data-action="explode">
+          <span>02</span> EXPLODE
+        </button>
+        <button type="button" data-action="wireframe">
+          <span>03</span> WIREFRAME
+        </button>
+        <button type="button" data-action="reset">
+          <span>04</span> RESET VIEW
+        </button>
+        <button type="button" data-action="export" class="accent">
+          <span>05</span> EXPORT GLB
+        </button>
+      </nav>
+
+      <footer>
+        <span>DRAG TO ORBIT · SCROLL TO ZOOM</span>
+        <span>Y-UP · METERS · GLTF READY</span>
+      </footer>
+
+      <div id="error-overlay" role="alert" hidden>
+        <strong>3D viewport unavailable</strong>
+        <span id="error-message"></span>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

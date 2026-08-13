@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minimal Three.js Test</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #071016; }
+    canvas { display: block; }
+    aside {
+      position: fixed; top: 24px; left: 24px; color: #dcebef;
+      font: 12px/1.5 system-ui, sans-serif; pointer-events: none;
+    }
+    strong { display: block; font-size: 22px; letter-spacing: .04em; }
+    span { color: #69c9d8; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <aside><span>MINIMAL THREE.JS TEST</span><strong>SENTRY NODE</strong>Drag to orbit · scroll to zoom</aside>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+    import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x071016);
+
+    const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 50);
+    camera.position.set(4, 2.6, 5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const environment = new RoomEnvironment();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(environment).texture;
+    environment.dispose();
+    pmrem.dispose();
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.8;
+    controls.target.y = 0.65;
+
+    const armor = new THREE.MeshPhysicalMaterial({
+      color: 0xd4dde0, metalness: 0.7, roughness: 0.28, clearcoat: 0.4
+    });
+    const dark = new THREE.MeshStandardMaterial({
+      color: 0x172128, metalness: 0.9, roughness: 0.24
+    });
+    const orange = new THREE.MeshStandardMaterial({
+      color: 0xd66b27, metalness: 0.65, roughness: 0.28
+    });
+    const glow = new THREE.MeshStandardMaterial({
+      color: 0x83f1ff, emissive: 0x00c9ef, emissiveIntensity: 4
+    });
+
+    const root = new THREE.Group();
+    root.name = "SentryNode";
+    scene.add(root);
+
+    function add(geometry, material, name, position, rotation = [0, 0, 0]) {
+      const object = new THREE.Mesh(geometry, material);
+      object.name = name;
+      object.position.set(...position);
+      object.rotation.set(...rotation);
+      object.castShadow = true;
+      object.receiveShadow = true;
+      root.add(object);
+      return object;
+    }
+
+    add(new RoundedBoxGeometry(1.55, 0.62, 1.05, 5, 0.16), armor, "Body", [0, 0.8, 0]);
+    add(new RoundedBoxGeometry(1.25, 0.18, 0.82, 4, 0.07), dark, "Belly", [0, 0.48, 0]);
+    add(new RoundedBoxGeometry(0.72, 0.08, 0.58, 3, 0.025), orange, "TopPlate", [0, 1.14, -0.05]);
+    add(new THREE.CylinderGeometry(0.27, 0.3, 0.2, 28), dark, "Neck", [0, 1.25, 0]);
+    const head = add(new RoundedBoxGeometry(0.72, 0.38, 0.48, 5, 0.11), armor, "SensorHead", [0, 1.5, 0.08]);
+    const lensFrame = add(new THREE.CylinderGeometry(0.15, 0.15, 0.09, 32), dark, "LensFrame", [0, 1.5, 0.34], [Math.PI / 2, 0, 0]);
+    const lens = add(new THREE.CircleGeometry(0.105, 32), glow, "Lens", [0, 1.5, 0.39]);
+    head.attach(lensFrame);
+    head.attach(lens);
+
+    for (const side of [-1, 1]) {
+      add(new RoundedBoxGeometry(0.7, 0.16, 0.46, 4, 0.06), orange, `Arm_${side}`, [side * 1.02, 0.82, 0]);
+      add(new THREE.CylinderGeometry(0.34, 0.34, 0.42, 32), dark, `Rotor_${side}`,
+        [side * 1.43, 0.82, 0], [Math.PI / 2, 0, 0]);
+      add(new THREE.TorusGeometry(0.34, 0.055, 10, 32), armor, `RotorRing_${side}`,
+        [side * 1.43, 0.82, 0.23]);
+    }
+
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(8, 80),
+      new THREE.MeshStandardMaterial({ color: 0x0b161d, roughness: 0.85, metalness: 0.2 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const key = new THREE.DirectionalLight(0xbdefff, 3);
+    key.position.set(4, 6, 4);
+    key.castShadow = true;
+    scene.add(key);
+    scene.add(new THREE.HemisphereLight(0x6dc7df, 0x10171d, 1.2));
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const time = clock.getElapsedTime();
+      root.position.y = 0.08 + Math.sin(time * 1.5) * 0.05;
+      head.rotation.y = Math.sin(time * 0.7) * 0.5;
+      lens.material.emissiveIntensity = 3.5 + Math.sin(time * 4) * 1.2;
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "name": "forge3d",
+  "version": "0.1.0",
+  "description": "Prompt-first local workflows for creating game-ready 3D assets with Blender and Godot.",
+  "author": {
+    "name": "Local developer"
+  },
+  "license": "MIT",
+  "keywords": [
+    "3d",
+    "blender",
+    "godot",
+    "game-development",
+    "animation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Forge3D",
+    "shortDescription": "Create and refine game-ready 3D assets.",
+    "longDescription": "Turns natural-language requests into editable Blender masters and validated Godot assets using local models, deterministic Blender tasks, and direct Blender and Godot MCP review.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create a game-ready prop and validate it in Blender and Godot.",
+      "Rig this character and test its deformation.",
+      "Retarget these animations to my new rig."
+    ]
+  }
+}

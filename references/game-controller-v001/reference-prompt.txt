@@ -1,0 +1,10 @@
+Use case: product-mockup
+Asset type: single-image 3D reconstruction reference and hard-surface modelling reference
+Primary request: one original, unbranded, premium ergonomic wireless game controller.
+Composition: complete isolated controller, centered, orthographic-like front/top view, mild perspective, no crop.
+Materials: matte graphite polymer, desaturated teal inset panels, dark rubber controls, warm amber accent.
+Details: twin sticks, D-pad, four unlabeled face buttons, menu buttons, shoulder hints, layered shell panels, seams, recessed wells, speaker perforations, status light.
+Constraints: coherent physical construction, strong silhouette, no branding, text, watermark, hands, cable, stand, packaging, floating parts, shadow, reflection, or extra objects.
+Background: exact flat #00ff00 chroma key, removed locally for reference.png.
+
+Generated with the built-in image generation tool, then locally chroma-keyed.
