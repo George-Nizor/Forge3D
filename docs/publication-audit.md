@@ -1,46 +1,51 @@
 # Forge3D publication audit
 
-Audit date: 2026-08-20. Target: public source repository and Windows x64 release 0.2.0.
+Audit updated: 2026-08-21. Target: public source repository and Windows x64 release 0.2.0.
 
-## Source boundary
+## Public source result
 
-- Secret signature scan across all tracked and unignored files: no private-key, GitHub token,
-  OpenAI key, AWS key, or Hugging Face token signatures found.
-- Suspect secret filenames: none.
+- The source repository is public at <https://github.com/George-Nizor/Forge3D>.
+- The former `Dev-Tools` repository was renamed to `Forge3D`; public `main` and tag `v0.2.0` point to
+  release commit `4328a28`.
+- Secret signature scans across tracked and unignored files found no private-key, GitHub token,
+  OpenAI key, AWS key, or Hugging Face token signatures and no suspect secret filenames.
 - Generated directories excluded: `.venv`, `node_modules`, renderer `dist`, `dist-package`, desktop
   runtime executable, `.tmp`, model directories, logs, caches, and user `output`/runs.
-- Publishable file set contains no stale old-repository branding or absolute former-checkout paths.
-- Three pre-existing tracked demo assets exceed 1 MiB: the game-controller splat and the
-  game-controller/medical-pod reference images. On 2026-08-20, the sole project owner confirmed
-  ownership and authorized their public redistribution with Forge3D.
-- The generated 175,818,934-byte release ZIP and standalone executable are ignored and belong only
-  on GitHub Releases.
+- The publishable file set contains no stale old-repository branding or absolute former-checkout paths.
+- Three tracked demo assets exceed 1 MiB. On 2026-08-20, the sole project owner confirmed ownership
+  and authorized their public redistribution with Forge3D.
 
 ## Dependency and redistribution review
 
 - User-owned Forge3D code is MIT.
 - Blender MCP, Godot MCP Toolkit, and GDGS retain their checked-in upstream licenses and attribution.
 - Electron, Three.js, SparkJS, fflate, Vite, and Electron Builder are MIT.
-- The standalone CLI uses the PyInstaller bootloader exception; keep its license with releases.
-- Local/cloud model and provider terms remain explicitly gated as documented in
-  `THIRD_PARTY_NOTICES.md`; model weights are not committed or bundled.
-- The source repository has no unapproved cloud-upload default. Network is disabled per job until
-  explicit user approval.
+- The standalone CLI uses the PyInstaller bootloader exception; its license ships with the release.
+- Local/cloud model and provider terms remain explicitly gated in `THIRD_PARTY_NOTICES.md`; model
+  weights are not committed or bundled.
+- Network use is disabled per job until explicit user approval, so no default path uploads user files.
 
 ## Release evidence
 
-- Python suite: 42 passing.
-- Electron unit/security suite: 11 passing.
-- Vite production build: passing.
-- PyInstaller CLI smoke: `forge3d 0.2.0`.
-- Electron Builder ZIP: generated successfully (`175,818,934` bytes, SHA-256
-  `47ce95e92c3337be8f7eb9f8c281838768577bbf342ce0894c67b6920e6d77d6`).
-- Instrumenta release-manifest parse, size, and SHA-256 verification: passing.
+- Public release: <https://github.com/George-Nizor/Forge3D/releases/tag/v0.2.0>.
+- Release ZIP: `175,818,934` bytes, SHA-256
+  `47ce95e92c3337be8f7eb9f8c281838768577bbf342ce0894c67b6920e6d77d6`.
+- Windows source suite: 42 passing. Fresh WSL clone: 38 passing and four Windows-only skips.
+- Electron unit/security suite: 11 passing; Vite production build passing; npm audit reports zero
+  vulnerabilities.
+- PyInstaller CLI smoke reports `forge3d 0.2.0`.
+- The public `instrumenta-release.json` and ZIP were downloaded independently and their size/hash
+  contract verified.
+- Instrumenta's real public-release path discovered the release, verified the manifest and ZIP,
+  extracted it, atomically activated version 0.2.0, resolved `Forge3D.exe`, and retained the pending
+  rollback pointer.
+- The managed public executable stayed healthy for an eight-second packaged launch using an isolated
+  Electron profile.
 
-## Remaining publication gates
+## Remaining installed-workflow checks
 
-Before making the repository or release public, inspect the exact staged diff, approve staging and
-commit separately, run a clean clone, re-run tests/audits, approve the GitHub repository rename and
-push, download the public release, verify its checksum, launch it without a source checkout, and
-record the final tag and checksum. Blender/Godot installed-app smoke tests remain required on the
-release candidate.
+Public source/release publication is complete. The remaining hands-on workflow acceptance is to run an
+actual Codex prompt through the GUI with locally installed Blender/Godot, inspect the produced artifact,
+restart Forge3D and recover its history, and exercise Blender/Godot open/review actions. These checks
+require the interactive desktop/app-control path and external tools; they are not claimed by the unit,
+protocol-fixture, managed-install, or packaged-launch evidence above.
