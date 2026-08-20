@@ -1,14 +1,8 @@
 {
   "mcpServers": {
     "blender": {
-      "command": "C:\\Users\\George\\.local\\bin\\uvx.exe",
-      "args": [
-        "--python",
-        "3.11",
-        "--from",
-        "blender-mcp==1.6.5",
-        "blender-mcp"
-      ],
+      "command": "uvx",
+      "args": ["--python", "3.11", "--from", "blender-mcp==1.6.5", "blender-mcp"],
       "env": {
         "BLENDER_HOST": "127.0.0.1",
         "BLENDER_PORT": "9876",
@@ -16,17 +10,10 @@
       }
     },
     "godot": {
-      "command": "C:\\Windows\\System32\\cmd.exe",
-      "args": [
-        "/c",
-        "npx",
-        "-y",
-        "@npgamedev/godot-mcp-server@1.0.0"
-      ],
-      "cwd": "C:\\Users\\George\\Godot Projects\\Dev-Tools\\godot",
+      "command": "npx",
+      "args": ["-y", "@npgamedev/godot-mcp-server@1.0.0"],
       "env": {
-        "GODOT_MCP_CONFIG_VERSION": "1",
-        "GODOT_MCP_PROJECT_PATH": "C:\\Users\\George\\Godot Projects\\Dev-Tools\\godot"
+        "GODOT_MCP_CONFIG_VERSION": "1"
       }
     }
   }

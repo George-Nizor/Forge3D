@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "id": "forge3d",
+  "name": "Forge3D",
+  "description": "Prompt-first local 3D creation, processing, rigging, animation, preview, and validation.",
+  "version": "0.2.0",
+  "repository": {
+    "provider": "github",
+    "owner": "George-Nizor",
+    "name": "Forge3D",
+    "channel": "stable"
+  },
+  "platforms": ["windows-x64"],
+  "adapter": {
+    "type": "managed-bundle",
+    "releaseManifestAsset": "instrumenta-release.json",
+    "launch": {
+      "candidates": ["desktop/dist-package/win-unpacked/Forge3D.exe"]
+    }
+  },
+  "build": {
+    "output": "desktop/dist-package"
+  },
+  "developer": {
+    "checkout": "../Forge3D",
+    "override": "explicit"
+  },
+  "mcp": {
+    "skill": "plugins/forge3d/skills/forge3d/SKILL.md"
+  }
+}

@@ -20,6 +20,14 @@ def toolkit_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def plugin_root() -> Path:
+    configured = os.environ.get("FORGE3D_PLUGIN_ROOT")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    candidate = toolkit_root() / "plugins" / "forge3d"
+    return candidate.resolve() if candidate.is_dir() else toolkit_root()
+
+
 def workspace_root(start: Path | None = None) -> Path:
     configured = os.environ.get("FORGE3D_ROOT")
     if configured:
@@ -36,7 +44,9 @@ def output_root(root: Path | None = None) -> Path:
     configured = os.environ.get("FORGE3D_OUTPUT")
     if configured:
         return Path(configured).expanduser().resolve()
-    return (root or workspace_root()) / "output"
+    if root is not None:
+        return root.resolve() / "output"
+    return Path.home() / "Documents" / "Forge3D" / "runs"
 
 
 def slugify(value: str, fallback: str = "asset") -> str:

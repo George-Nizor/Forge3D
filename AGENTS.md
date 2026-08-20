@@ -1,6 +1,6 @@
 # Forge3D repository guidance
 
-- Keep Forge3D a personal, prompt-first tool. Do not add a daemon, database, web UI, or generic workflow framework.
+- Keep Forge3D a personal, prompt-first tool. The approved Electron desktop is a local rich client for Codex App Server, run history, previews, and guarded file actions; do not add a network daemon, database, hosted web UI, or generic workflow framework.
 - Treat Blender `.blend` files as editable source and GLB files as runtime exports.
 - Use the direct Blender MCP for interactive inspection and supervised viewport edits. Use reviewed scripts under `blender/` for repeatable processing.
 - Use the direct Godot MCP for import, scene, runtime, screenshot, and debugger validation.

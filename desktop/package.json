@@ -1,0 +1,58 @@
+{
+  "name": "forge3d-desktop",
+  "productName": "Forge3D",
+  "version": "0.2.0",
+  "private": true,
+  "author": "George Nizor",
+  "license": "MIT",
+  "description": "Prompt-first Forge3D desktop client for Codex, Blender, and Godot",
+  "main": "src/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "start": "electron .",
+    "build": "vite build",
+    "test": "node --test test/*.test.cjs",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@sparkjsdev/spark": "2.1.0",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "electron": "43.4.1",
+    "electron-builder": "26.15.3",
+    "vite": "8.2.2"
+  },
+  "build": {
+    "appId": "com.instrumenta.forge3d",
+    "productName": "Forge3D",
+    "executableName": "Forge3D",
+    "asar": true,
+    "directories": {
+      "output": "dist-package",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "src/main.cjs",
+      "src/preload.cjs",
+      "src/lib/**/*.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "runtime/forge3d.exe", "to": "bin/forge3d.exe" },
+      { "from": "../plugins/forge3d", "to": "forge3d-plugin" },
+      { "from": "../blender", "to": "forge3d-toolkit/blender" },
+      { "from": "../scripts", "to": "forge3d-toolkit/scripts", "filter": ["**/*", "!build_desktop.ps1", "!forge3d_entry.py"] },
+      { "from": "../LICENSE", "to": "LICENSE" },
+      { "from": "../THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
+      { "from": "../godot", "to": "godot-template", "filter": ["**/*", "!.godot/**/*"] }
+    ],
+    "win": {
+      "icon": "assets/icon.png",
+      "target": ["zip"],
+      "artifactName": "Forge3D-${version}-windows-x64.${ext}"
+    }
+  }
+}

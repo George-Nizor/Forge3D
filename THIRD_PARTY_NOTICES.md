@@ -31,6 +31,19 @@ CLI.
   `tripo3d==0.4.2` package only for an explicitly approved cloud job. It is not
   installed into Forge3D or Blender.
 
+The packaged Forge3D desktop also includes:
+
+- Electron 43.4.1: MIT.
+- Three.js 0.185.1: MIT; its bundled license is preserved in the npm package.
+- SparkJS 2.1.0 and its fflate dependency: MIT; used only for local Gaussian
+  splat preview.
+- The PyInstaller bootloader used for the standalone Forge3D CLI, under the
+  PyInstaller GPL license with its bootloader exception. Application code
+  remains MIT and source is available in this repository.
+
+Electron Builder and Vite are build-time tools and are not application runtime
+APIs; their MIT notices remain in the locked development dependency tree.
+
 Other optional model workers retain their upstream licenses and are downloaded
 only on demand. `forge3d models info <name>` shows the recorded source and
 license URL.

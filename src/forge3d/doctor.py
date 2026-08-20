@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .blender import find_blender
-from .paths import toolkit_root, workspace_root
+from .paths import plugin_root, toolkit_root, workspace_root
 from .process import CommandRunner, WSL
 
 
@@ -33,6 +33,7 @@ def find_godot() -> Path | None:
 def check_environment(root: Path | None = None) -> dict[str, Any]:
     root = (root or workspace_root()).resolve()
     toolkit = toolkit_root()
+    plugin = plugin_root()
     runner = CommandRunner()
     checks: list[dict[str, Any]] = []
 
@@ -115,10 +116,10 @@ def check_environment(root: Path | None = None) -> dict[str, Any]:
         ),
         (
             "codex-plugin",
-            toolkit / "plugins" / "forge3d" / ".codex-plugin" / "plugin.json",
+            plugin / ".codex-plugin" / "plugin.json",
             True,
         ),
-        ("codex-mcp-config", toolkit / ".codex" / "config.toml", True),
+        ("codex-mcp-config", plugin / ".mcp.json", True),
     ]
     for name, path, required in file_checks:
         checks.append(

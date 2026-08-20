@@ -3,11 +3,11 @@
 Forge3D is a personal, prompt-first toolkit for making game assets with Codex,
 Blender, and Godot.
 
-You describe an asset in ChatGPT or the Codex CLI. Forge3D chooses a practical
-route, creates an editable Blender source when the asset needs real geometry,
-and checks the game-facing result in Godot. It is a focused set of scripts and
-integrations, not a daemon, web app, asset database, or universal text-to-3D
-model.
+You describe an asset in the Forge3D desktop, ChatGPT, or the Codex CLI.
+Forge3D chooses a practical route, creates an editable Blender source when the
+asset needs real geometry, and checks the game-facing result in Godot. It is a
+focused local application and toolkit, not a daemon, hosted web app, asset
+database, or universal text-to-3D model.
 
 ![Controller reference](docs/images/controller-reference.webp)
 
@@ -62,7 +62,7 @@ surface.
 
 The `.blend` is the editable source of truth for conventional assets. GLB is
 the game-facing export. PLY/SPLAT is the visual master for Gaussian assets.
-Generated work is written to `output/`, which is ignored by Git.
+Generated work is written to `%USERPROFILE%\Documents\Forge3D\runs`. It remains outside source control.
 
 ## Example: one controller, two representations
 
@@ -86,7 +86,7 @@ animated, exported, and used by ordinary engine systems.
 
 ## Installation
 
-Forge3D is currently Windows-first. The tested setup is:
+Forge3D 0.2.0 is packaged for Windows x64. The tested external-tool setup is:
 
 - Blender 5.x, including the Steam Blender 5.2 LTS build
 - Godot 4.6
@@ -97,7 +97,8 @@ Forge3D is currently Windows-first. The tested setup is:
 - An NVIDIA GPU with at least 8 GB VRAM; local testing used an RTX 4080 SUPER
   with 16 GB
 
-From PowerShell:
+Normal users install the verified managed bundle through Instrumenta. A
+source checkout is an explicit developer override. To prepare that checkout:
 
 ```powershell
 .\scripts\setup.ps1 -InstallModels -InstallPersonalPlugin
@@ -117,7 +118,7 @@ Blender is not found automatically. Adjust the Godot executable in
 
 ## Usage
 
-The normal interface is a prompt in Codex or ChatGPT, for example:
+The normal interface is the Forge3D desktop, which drives the user's local Codex App Server session and streams steps, approvals, artifacts, previews, validation, and logs. Direct Codex or ChatGPT prompts remain supported, for example:
 
 > Create a game-ready industrial generator. Use authored Blender geometry,
 > keep an editable `.blend`, add collision and LODs, inspect it through Blender
@@ -198,19 +199,31 @@ Run `forge3d models info <name>` for recorded capability and license notes.
 
 ```text
 blender/       Repeatable Blender tasks and authored asset build scripts
-docs/images/   Showcase images used by this README
+desktop/       Sandboxed Electron client, previews, tests, and Windows package
+docs/          Architecture, schema, release guides, and showcase images
 experiments/   Technology-grouped Three.js and TripoSplat research
 godot/         GLB review harness, Godot MCP toolkit, and GDGS renderer
+instrumenta/   Product-manifest integration boundary
+packaging/     Instrumenta release-manifest template
 plugins/       Personal Codex plugin and Forge3D skill
 references/    Selected modelling references and prompts
-scripts/       Setup, MCP launchers, cloud adapter, and WSL workers
+scripts/       Setup, packaging, MCP launchers, cloud adapter, and WSL workers
 src/forge3d/   Dependency-light host CLI
 tests/         Python integration and policy tests
 vendor/        Small pinned third-party source required by setup
 ```
 
-The production path is intentionally small. There is no daemon, database,
-queue, web UI, or generic workflow framework.
+The production path is intentionally local and bounded. The Electron desktop is a
+rich client; there is no network daemon, database, hosted web UI, or generic workflow framework.
+
+## Desktop documentation
+
+- [`docs/desktop-architecture.md`](docs/desktop-architecture.md) covers Electron security, the Codex
+  App Server lifecycle, approvals, plugin repair, previews, and external tool discovery.
+- [`docs/run-schema-v2.md`](docs/run-schema-v2.md) defines run history, relative artifacts, v1
+  compatibility, recovery, archive, duplicate, and trash behavior.
+- [`docs/releasing.md`](docs/releasing.md) covers Windows packaging, release verification, audits,
+  and troubleshooting.
 
 ## Validation
 
@@ -228,8 +241,7 @@ reviewed in the GDGS scene with its collision proxy enabled.
 
 ## Known limitations
 
-- This is a Windows-first personal tool, not a packaged cross-platform
-  application.
+- This is a packaged Windows x64 personal tool, not a cross-platform application.
 - Authored modelling is targeted procedural Blender work assisted by an LLM,
   not a universal text-to-mesh model. Organic characters still need an
   appropriate source mesh or deliberately selected reconstruction backend.
