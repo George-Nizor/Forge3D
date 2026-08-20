@@ -22,6 +22,7 @@ from .models import (
 )
 from .paths import slugify
 from .workflows import (
+    humanoid_retarget_animation,
     make_asset,
     prepare_animation_request,
     process_asset,
@@ -139,6 +140,21 @@ def parser() -> argparse.ArgumentParser:
     retarget.add_argument("--no-bake", action="store_true")
     retarget.add_argument("--output-dir", type=Path)
     retarget.set_defaults(handler=_retarget)
+
+    humanoid_retarget = commands.add_parser(
+        "humanoid-retarget",
+        help=(
+            "Retarget a tested human control with rest-relative global motion "
+            "and semantic anatomy proof"
+        ),
+    )
+    humanoid_retarget.add_argument("target", type=Path)
+    humanoid_retarget.add_argument("source_animation", type=Path)
+    humanoid_retarget.add_argument("--profile", required=True, type=Path)
+    humanoid_retarget.add_argument("--name")
+    humanoid_retarget.add_argument("--no-review", action="store_true")
+    humanoid_retarget.add_argument("--output-dir", type=Path)
+    humanoid_retarget.set_defaults(handler=_humanoid_retarget)
 
     animate = commands.add_parser(
         "animate",
@@ -333,6 +349,19 @@ def _retarget(args: argparse.Namespace) -> int:
         name=args.name,
         output_base=_resolve_output(args.output_dir),
         bake=not args.no_bake,
+    )
+    _print_run(run)
+    return 0
+
+
+def _humanoid_retarget(args: argparse.Namespace) -> int:
+    run = humanoid_retarget_animation(
+        target=args.target,
+        source_animation=args.source_animation,
+        profile=args.profile,
+        name=args.name,
+        output_base=_resolve_output(args.output_dir),
+        render_review=not args.no_review,
     )
     _print_run(run)
     return 0

@@ -13,7 +13,7 @@ Audit date: 2026-08-20. Target: public source repository and Windows x64 release
 - Three pre-existing tracked demo assets exceed 1 MiB: the game-controller splat and the
   game-controller/medical-pod reference images. On 2026-08-20, the sole project owner confirmed
   ownership and authorized their public redistribution with Forge3D.
-- The generated 175,805,612-byte release ZIP and standalone executable are ignored and belong only
+- The generated 175,818,934-byte release ZIP and standalone executable are ignored and belong only
   on GitHub Releases.
 
 ## Dependency and redistribution review
@@ -29,12 +29,12 @@ Audit date: 2026-08-20. Target: public source repository and Windows x64 release
 
 ## Release evidence
 
-- Python suite: 41 passing.
+- Python suite: 42 passing.
 - Electron unit/security suite: 11 passing.
 - Vite production build: passing.
 - PyInstaller CLI smoke: `forge3d 0.2.0`.
-- Electron Builder ZIP: generated successfully (`175,805,612` bytes, SHA-256
-  `501853e4ad846d2e3058438244ba582c7ffc7dad96d9b55a2046a0a65c4142ab`).
+- Electron Builder ZIP: generated successfully (`175,818,934` bytes, SHA-256
+  `47ce95e92c3337be8f7eb9f8c281838768577bbf342ce0894c67b6920e6d77d6`).
 - Instrumenta release-manifest parse, size, and SHA-256 verification: passing.
 
 ## Remaining publication gates

@@ -15,6 +15,7 @@ from forge3d.models import ModelRunResult, run_tripo_cloud
 from forge3d.paths import slugify
 from forge3d.runs import Run, file_hash
 from forge3d.workflows import (
+    humanoid_retarget_animation,
     prepare_animation_request,
     make_asset,
     process_asset,
@@ -257,6 +258,55 @@ class RunTests(unittest.TestCase):
             self.assertEqual(export_args["actions"], action)
             preview_args = blender.calls[3][1]
             self.assertEqual(preview_args["armature"], "TargetRig")
+
+    def test_humanoid_retarget_runs_semantic_rig_and_animation_gates(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            target = base / "target.blend"
+            source = base / "human-control.glb"
+            profile = base / "profile.json"
+            target.write_bytes(b"blend")
+            source.write_bytes(b"glTF")
+            profile.write_text(
+                json.dumps(
+                    {
+                        "schema": "forge3d.humanoid-retarget-profile.v1",
+                        "source_armature": "HumanRig",
+                        "target_armature": "AstronautRig",
+                        "source_to_target": {"DEF-head": "head"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            blender = FakeBlender()
+            run = humanoid_retarget_animation(
+                target=target,
+                source_animation=source,
+                profile=profile,
+                output_base=base / "output",
+                blender=blender,  # type: ignore[arg-type]
+            )
+
+            self.assertEqual(run.manifest["status"], "completed")
+            self.assertEqual(
+                [name for name, _ in blender.calls],
+                [
+                    "humanoid-retarget",
+                    "rig-validate",
+                    "animation-validate",
+                    "export-glb",
+                    "turntable",
+                ],
+            )
+            retarget_args = blender.calls[0][1]
+            self.assertEqual(retarget_args["source_animation"], source.resolve())
+            self.assertEqual(retarget_args["profile"], profile.resolve())
+            self.assertIn("review_dir", retarget_args)
+            action = run.manifest["settings"]["action_name"]
+            self.assertEqual(retarget_args["action_name"], action)
+            self.assertEqual(blender.calls[2][1]["actions"], action)
+            self.assertEqual(blender.calls[3][1]["armature"], "AstronautRig")
+            self.assertEqual(blender.calls[3][1]["actions"], action)
 
 
 class CLITests(unittest.TestCase):

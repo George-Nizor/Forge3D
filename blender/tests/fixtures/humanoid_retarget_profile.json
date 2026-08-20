@@ -1,0 +1,23 @@
+{
+  "schema": "forge3d.humanoid-retarget-profile.v1",
+  "source_armature": "SourceRig",
+  "target_armature": "TargetRig",
+  "source_action": "SourceWave",
+  "source_to_target": {
+    "root": "root",
+    "spine": "spine"
+  },
+  "source_frames": [1, 5, 10],
+  "source_fps": 24,
+  "output_fps": 10,
+  "forward_axis": "-Y",
+  "absolute_orientation_bones": ["spine"],
+  "chains": {
+    "spine": ["root", "spine"]
+  },
+  "leg_chains": [],
+  "minimum_rest_direction_dot": 0.999,
+  "minimum_pose_direction_dot": 0.999,
+  "maximum_chain_gap": 0.00001,
+  "maximum_joint_angle_delta_degrees": 0.01
+}

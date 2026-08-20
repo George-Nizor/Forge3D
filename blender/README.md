@@ -32,6 +32,7 @@ Every invocation prints exactly one machine-readable line beginning with
 | `rig-validate` | Audit bone structure, attachments, deform weights, influence limits, and assigned actions. |
 | `animation-validate` | Audit slotted Actions, channels, keyframes, clip ranges, and optional loop seams. |
 | `retarget` | Build an inspectable local-space bone mapping and optionally visually bake it to a target armature. |
+| `humanoid-retarget` | Bake profile-driven rest-relative global motion and prove anatomy, facing, equipment attachments, and matched control/target review frames. |
 
 Run `... -- <task> --help` for the authoritative flags.
 

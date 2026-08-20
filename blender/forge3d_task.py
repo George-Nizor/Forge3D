@@ -3867,6 +3867,652 @@ def bake_retarget(
         bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def load_humanoid_profile(args: argparse.Namespace) -> dict[str, Any]:
+    path = path_from_user(args.profile, kind="humanoid profile", must_exist=True)
+    profile = load_json_object(path.read_text(encoding="utf-8"), kind="humanoid profile")
+    if profile.get("schema") != "forge3d.humanoid-retarget-profile.v1":
+        raise TaskError(
+            "Humanoid profile schema must be forge3d.humanoid-retarget-profile.v1"
+        )
+    for key in ("source_armature", "target_armature"):
+        if not isinstance(profile.get(key), str) or not profile[key].strip():
+            raise TaskError(f"Humanoid profile requires a non-empty {key}")
+    mapping = profile.get("source_to_target")
+    if not isinstance(mapping, dict) or not mapping:
+        raise TaskError("Humanoid profile requires a non-empty source_to_target object")
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in mapping.items()):
+        raise TaskError("Humanoid profile bone-map keys and values must be strings")
+    if len(set(mapping.values())) != len(mapping):
+        raise TaskError("Humanoid profile maps multiple source bones to one target bone")
+    chains = profile.get("chains", {})
+    if not isinstance(chains, dict):
+        raise TaskError("Humanoid profile chains must be an object")
+    for name, bones in chains.items():
+        if not isinstance(name, str) or not isinstance(bones, list) or len(bones) < 2:
+            raise TaskError("Every humanoid chain must name at least two target bones")
+        if any(not isinstance(bone, str) or not bone for bone in bones):
+            raise TaskError("Humanoid chain bone names must be non-empty strings")
+    return profile
+
+
+def set_fractional_frame(scene: bpy.types.Scene, frame: float) -> None:
+    whole = math.floor(frame)
+    scene.frame_set(whole, subframe=frame - whole)
+
+
+def normalized_rotation(matrix: Matrix) -> Matrix:
+    return matrix.to_3x3().normalized()
+
+
+def parse_axis(value: str) -> Vector:
+    axes = {
+        "X": Vector((1.0, 0.0, 0.0)),
+        "+X": Vector((1.0, 0.0, 0.0)),
+        "-X": Vector((-1.0, 0.0, 0.0)),
+        "Y": Vector((0.0, 1.0, 0.0)),
+        "+Y": Vector((0.0, 1.0, 0.0)),
+        "-Y": Vector((0.0, -1.0, 0.0)),
+        "Z": Vector((0.0, 0.0, 1.0)),
+        "+Z": Vector((0.0, 0.0, 1.0)),
+        "-Z": Vector((0.0, 0.0, -1.0)),
+    }
+    try:
+        return axes[value.strip().upper()].copy()
+    except (AttributeError, KeyError) as exc:
+        raise TaskError(f"Unsupported humanoid axis {value!r}; use +/-X, +/-Y, or +/-Z") from exc
+
+
+def humanoid_source_frames(
+    profile: dict[str, Any], action: bpy.types.Action
+) -> list[float]:
+    configured = profile.get("source_frames")
+    if configured is not None:
+        if not isinstance(configured, list) or len(configured) < 2:
+            raise TaskError("source_frames must contain at least two numbers")
+        if any(not isinstance(value, (int, float)) for value in configured):
+            raise TaskError("source_frames values must be numbers")
+        return [float(value) for value in configured]
+    count = profile.get("sample_count", 8)
+    if not isinstance(count, int) or count < 2 or count > 120:
+        raise TaskError("sample_count must be an integer between 2 and 120")
+    start, end = (float(value) for value in action.frame_range)
+    if end <= start:
+        raise TaskError("Source action has no usable frame range")
+    exclude_endpoint = bool(profile.get("exclude_loop_endpoint", True))
+    divisor = count if exclude_endpoint else count - 1
+    step = (end - start) / divisor
+    return [start + index * step for index in range(count)]
+
+
+def import_humanoid_source(
+    raw_path: str | None,
+    source_name: str,
+) -> tuple[bpy.types.Object, list[bpy.types.Object], list[bpy.types.Action]]:
+    if not raw_path:
+        return get_armature(source_name), [], []
+    path = path_from_user(
+        raw_path,
+        kind="source animation",
+        must_exist=True,
+        allowed_suffixes={".glb", ".gltf", ".fbx"},
+    )
+    before_objects = set(bpy.data.objects)
+    before_actions = set(bpy.data.actions)
+    if path.suffix.lower() in {".glb", ".gltf"}:
+        bpy.ops.import_scene.gltf(filepath=str(path))
+    else:
+        bpy.ops.import_scene.fbx(filepath=str(path))
+    imported_objects = [obj for obj in bpy.data.objects if obj not in before_objects]
+    imported_actions = [action for action in bpy.data.actions if action not in before_actions]
+    armatures = [obj for obj in imported_objects if obj.type == "ARMATURE"]
+    exact = next((obj for obj in armatures if obj.name == source_name), None)
+    if exact is not None:
+        source = exact
+    elif len(armatures) == 1:
+        source = armatures[0]
+    else:
+        raise TaskError(
+            f"Could not resolve source armature {source_name!r} among imported armatures "
+            f"{[obj.name for obj in armatures]}"
+        )
+    return source, imported_objects, imported_actions
+
+
+def evaluated_object_center(name: str, depsgraph: bpy.types.Depsgraph) -> Vector:
+    obj = bpy.data.objects.get(name)
+    if obj is None or obj.type != "MESH":
+        raise TaskError(f"Facing marker must be an existing mesh object: {name}")
+    evaluated = obj.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    try:
+        if not mesh.vertices:
+            raise TaskError(f"Facing marker mesh has no vertices: {name}")
+        return sum(
+            (evaluated.matrix_world @ vertex.co for vertex in mesh.vertices),
+            Vector(),
+        ) / len(mesh.vertices)
+    finally:
+        evaluated.to_mesh_clear()
+
+
+def object_bound_to_bone(
+    obj: bpy.types.Object,
+    armature: bpy.types.Object,
+    bone_name: str,
+) -> bool:
+    if obj.parent == armature and obj.parent_type == "BONE" and obj.parent_bone == bone_name:
+        return True
+    if obj.vertex_groups.get(bone_name) is None:
+        return False
+    return any(
+        modifier.type == "ARMATURE" and modifier.object == armature
+        for modifier in obj.modifiers
+    )
+
+
+def render_humanoid_review(
+    armature: bpy.types.Object,
+    frames: Sequence[float],
+    output_dir: Path,
+    prefix: str,
+    *,
+    resolution: int,
+    forward_axis: Vector,
+) -> list[str]:
+    renderable = [
+        obj
+        for obj in armature_export_objects(armature)
+        if obj.type in {"MESH", "CURVE", "SURFACE", "FONT", "META"}
+    ]
+    bounds = object_world_bounds(renderable)
+    if not renderable or bounds is None:
+        raise TaskError(f"No renderable meshes are attached to {armature.name}")
+    minimum, maximum = bounds
+    center = (minimum + maximum) * 0.5
+    size = maximum - minimum
+    radius = max(size.length * 0.5, 0.5)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    scene = bpy.context.scene
+    old_camera = scene.camera
+    old_engine = scene.render.engine
+    old_resolution = (scene.render.resolution_x, scene.render.resolution_y)
+    old_percentage = scene.render.resolution_percentage
+    old_transparent = scene.render.film_transparent
+    hidden = {obj: obj.hide_render for obj in scene.objects}
+    collection = bpy.data.collections.new(f"Forge3D_{prefix}_Review")
+    scene.collection.children.link(collection)
+    camera_data = bpy.data.cameras.new(f"Forge3D_{prefix}_ReviewCamera")
+    camera_data.type = "ORTHO"
+    camera_data.ortho_scale = max(size.x, size.y, size.z) * 1.28
+    camera = bpy.data.objects.new(camera_data.name, camera_data)
+    camera[GENERATED_BY_KEY] = f"Forge3D {TOOL_VERSION}"
+    collection.objects.link(camera)
+    light_scale = max(radius, 0.5)
+    key = create_area_light(
+        collection,
+        f"Forge3D_{prefix}_Key",
+        center,
+        Vector((-2.0, -2.5, 3.0)) * light_scale,
+        energy=850.0,
+        size=light_scale * 2.0,
+        color=(1.0, 0.93, 0.82),
+    )
+    fill = create_area_light(
+        collection,
+        f"Forge3D_{prefix}_Fill",
+        center,
+        Vector((2.5, -1.0, 1.5)) * light_scale,
+        energy=450.0,
+        size=light_scale * 2.0,
+        color=(0.72, 0.84, 1.0),
+    )
+    generated = {camera, key, fill}
+    for obj in scene.objects:
+        obj.hide_render = obj not in renderable and obj not in generated
+
+    side_axis = Vector((-1.0, 0.0, 0.0))
+    if abs(forward_axis.dot(side_axis)) > 0.9:
+        side_axis = Vector((0.0, -1.0, 0.0))
+    views = {
+        "front": forward_axis.normalized(),
+        "side": side_axis,
+        "isometric": (forward_axis + side_axis + Vector((0.0, 0.0, 0.72))).normalized(),
+    }
+    scene.camera = camera
+    scene.render.engine = "BLENDER_EEVEE"
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGBA"
+    scene.render.resolution_x = resolution
+    scene.render.resolution_y = resolution
+    scene.render.resolution_percentage = 100
+    scene.render.film_transparent = True
+    outputs: list[str] = []
+    try:
+        for view_name, direction in views.items():
+            camera.location = center + direction * max(radius * 3.0, 2.0)
+            look_at(camera, center)
+            for index, frame in enumerate(frames, start=1):
+                set_fractional_frame(scene, frame)
+                path = output_dir / f"{prefix}_{view_name}_{index:03d}.png"
+                scene.render.filepath = str(path)
+                bpy.ops.render.render(write_still=True)
+                outputs.append(str(path))
+    finally:
+        for obj, state in hidden.items():
+            if obj.name in bpy.data.objects:
+                obj.hide_render = state
+        scene.camera = old_camera
+        scene.render.engine = old_engine
+        scene.render.resolution_x, scene.render.resolution_y = old_resolution
+        scene.render.resolution_percentage = old_percentage
+        scene.render.film_transparent = old_transparent
+        for obj in list(collection.objects):
+            bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.collections.remove(collection)
+    return outputs
+
+
+def task_humanoid_retarget(args: argparse.Namespace, report: dict[str, Any]) -> None:
+    input_path = load_input(args, report)
+    profile = load_humanoid_profile(args)
+    mapping: dict[str, str] = profile["source_to_target"]
+    target = get_armature(profile["target_armature"])
+    output_fps = profile.get("output_fps", 10)
+    source_fps = profile.get("source_fps", 24)
+    if not isinstance(output_fps, int) or not 1 <= output_fps <= 240:
+        raise TaskError("output_fps must be an integer from 1 to 240")
+    if not isinstance(source_fps, int) or not 1 <= source_fps <= 240:
+        raise TaskError("source_fps must be an integer from 1 to 240")
+    scene = bpy.context.scene
+    scene.render.fps = source_fps
+    source, imported_objects, imported_actions = import_humanoid_source(
+        args.source_animation,
+        profile["source_armature"],
+    )
+    if source == target:
+        raise TaskError("Source and target armatures must be different")
+    missing_source = [name for name in mapping if source.pose.bones.get(name) is None]
+    missing_target = [name for name in mapping.values() if target.pose.bones.get(name) is None]
+    if missing_source or missing_target:
+        raise TaskError(
+            "Humanoid map references missing bones: "
+            f"source={missing_source}, target={missing_target}"
+        )
+    configured_source_action = profile.get("source_action")
+    if configured_source_action is not None:
+        if not isinstance(configured_source_action, str) or not configured_source_action:
+            raise TaskError("source_action must be a non-empty string")
+        selected_action = bpy.data.actions.get(configured_source_action)
+        if selected_action is None:
+            available = sorted(action.name for action in bpy.data.actions)
+            raise TaskError(
+                f"Source action {configured_source_action!r} does not exist; "
+                f"available actions={available}"
+            )
+        source.animation_data_create()
+        source.animation_data.action = selected_action
+    if source.animation_data is None or source.animation_data.action is None:
+        raise TaskError(f"Source armature {source.name!r} has no active action")
+    source_action = source.animation_data.action
+    resolved_source_name = source.name
+    source_action_name = source_action.name
+    source_frames = humanoid_source_frames(profile, source_action)
+    yaw = math.radians(float(profile.get("source_to_target_yaw_degrees", 0.0)))
+    alignment = Matrix.Rotation(yaw, 3, "Z")
+    alignment_inverse = alignment.inverted()
+    source_world_rotation = normalized_rotation(source.matrix_world)
+    target_world_rotation = normalized_rotation(target.matrix_world)
+    target_world_inverse = target_world_rotation.inverted()
+
+    rest_metrics: dict[str, Any] = {}
+    source_rest_rotations: dict[str, Matrix] = {}
+    target_rest_rotations: dict[str, Matrix] = {}
+    target_rest_directions: dict[str, Vector] = {}
+    minimum_rest_dot = float(profile.get("minimum_rest_direction_dot", 0.5))
+    issues: list[dict[str, Any]] = []
+    for source_name, target_name in mapping.items():
+        source_bone = source.data.bones[source_name]
+        target_bone = target.data.bones[target_name]
+        source_rest_rotation = alignment @ source_world_rotation @ normalized_rotation(source_bone.matrix_local)
+        target_rest_rotation = target_world_rotation @ normalized_rotation(target_bone.matrix_local)
+        source_rest_rotations[source_name] = source_rest_rotation
+        target_rest_rotations[target_name] = target_rest_rotation
+        source_direction = (alignment @ source_world_rotation @ (source_bone.tail_local-source_bone.head_local)).normalized()
+        target_direction = (target_world_rotation @ (target_bone.tail_local-target_bone.head_local)).normalized()
+        target_rest_directions[target_name] = target_direction
+        dot = source_direction.dot(target_direction)
+        rest_metrics[source_name] = {"target": target_name, "direction_dot": dot}
+        if dot < minimum_rest_dot:
+            issue(
+                issues,
+                "error",
+                "humanoid.rest_direction_mismatch",
+                f"Rest directions disagree for {source_name!r} -> {target_name!r}",
+                source_bone=source_name,
+                target_bone=target_name,
+                direction_dot=dot,
+                minimum=minimum_rest_dot,
+            )
+
+    samples: list[dict[str, Any]] = []
+    first_positions: dict[str, Vector] = {}
+    for index, source_frame in enumerate(source_frames):
+        set_fractional_frame(scene, source_frame)
+        bpy.context.view_layer.update()
+        deltas: dict[str, Matrix] = {}
+        directions: dict[str, Vector] = {}
+        pose_rotations: dict[str, Matrix] = {}
+        positions: dict[str, Vector] = {}
+        for source_name in mapping:
+            pose = source.pose.bones[source_name]
+            pose_world_rotation = alignment @ source_world_rotation @ normalized_rotation(pose.matrix)
+            pose_rotations[source_name] = pose_world_rotation
+            deltas[source_name] = (
+                pose_world_rotation
+                @ source_rest_rotations[source_name].inverted()
+            )
+            direction = alignment @ source_world_rotation @ (pose.tail-pose.head)
+            directions[source_name] = direction.normalized()
+            position = alignment @ source_world_rotation @ pose.head
+            positions[source_name] = position
+            if index == 0:
+                first_positions[source_name] = position.copy()
+        samples.append(
+            {
+                "source_frame": source_frame,
+                "deltas": deltas,
+                "directions": directions,
+                "pose_rotations": pose_rotations,
+                "positions": positions,
+            }
+        )
+
+    forward_axis = parse_axis(str(profile.get("forward_axis", "-Y")))
+    review_outputs: list[str] = []
+    if args.review_dir:
+        review_dir = path_from_user(args.review_dir, kind="review directory")
+        if review_dir.exists() and any(review_dir.iterdir()) and not args.force:
+            raise TaskError(f"Review directory is not empty; pass --force: {review_dir}")
+        resolution = int(profile.get("review_resolution", 256))
+        if not 64 <= resolution <= 2048:
+            raise TaskError("review_resolution must be from 64 to 2048")
+        review_outputs.extend(
+            render_humanoid_review(
+                source,
+                source_frames,
+                review_dir,
+                "control",
+                resolution=resolution,
+                forward_axis=(alignment @ forward_axis).normalized(),
+            )
+        )
+
+    old_target_action = target.animation_data.action if target.animation_data else None
+    target.animation_data_create()
+    action_name = args.action_name or str(profile.get("action_name", "HumanoidRetarget"))
+    if bpy.data.actions.get(action_name):
+        action_name = bpy.data.actions.new(action_name).name
+    else:
+        bpy.data.actions.new(action_name)
+    target_action = bpy.data.actions[action_name]
+    target.animation_data.action = target_action
+    remove_retarget_constraints(target)
+    target.data.pose_position = "POSE"
+    scene.render.fps = output_fps
+    scene.frame_start = 1
+    scene.frame_end = len(samples)
+    translation_scales = profile.get("translation_scales", {})
+    if not isinstance(translation_scales, dict):
+        raise TaskError("translation_scales must be an object keyed by source bone")
+    mapped_targets = set(mapping.values())
+    absolute_orientation_bones = profile.get("absolute_orientation_bones", [])
+    if not isinstance(absolute_orientation_bones, list) or any(
+        not isinstance(name, str) or name not in mapping
+        for name in absolute_orientation_bones
+    ):
+        raise TaskError(
+            "absolute_orientation_bones must list source bones present in source_to_target"
+        )
+    absolute_orientation_set = set(absolute_orientation_bones)
+    ordered_mapping = sorted(
+        mapping.items(),
+        key=lambda item: len(target.data.bones[item[1]].parent_recursive),
+    )
+    for output_frame, sample in enumerate(samples, start=1):
+        scene.frame_set(output_frame)
+        for source_name, target_name in ordered_mapping:
+            pose = target.pose.bones[target_name]
+            pose.rotation_mode = "QUATERNION"
+            if source_name in absolute_orientation_set:
+                desired_world_rotation = sample["pose_rotations"][source_name]
+            else:
+                desired_world_rotation = sample["deltas"][source_name] @ target_rest_rotations[target_name]
+            desired_local_rotation = target_world_inverse @ desired_world_rotation
+            desired = Matrix.Identity(4)
+            for row in range(3):
+                for column in range(3):
+                    desired[row][column] = desired_local_rotation[row][column]
+            scale = translation_scales.get(source_name)
+            if scale is not None:
+                if not isinstance(scale, (int, float)):
+                    raise TaskError(f"Translation scale for {source_name} must be numeric")
+                world_delta = sample["positions"][source_name] - first_positions[source_name]
+                desired.translation = (
+                    target.data.bones[target_name].head_local
+                    + target_world_inverse @ (world_delta * float(scale))
+                )
+            elif pose.parent is not None and pose.parent.name in mapped_targets:
+                desired.translation = pose.parent.tail.copy()
+            else:
+                desired.translation = target.data.bones[target_name].head_local.copy()
+            pose.matrix = desired
+            pose.keyframe_insert("location", frame=output_frame, group=target_name)
+            pose.keyframe_insert("rotation_quaternion", frame=output_frame, group=target_name)
+            pose.keyframe_insert("scale", frame=output_frame, group=target_name)
+            bpy.context.view_layer.update()
+    for curve in iter_action_fcurves(target_action):
+        for point in curve.keyframe_points:
+            point.interpolation = "LINEAR"
+
+    # Remove the source control only after the control proof and target bake.
+    source_closure = set(armature_export_objects(source))
+    for obj in list(source_closure | set(imported_objects)):
+        if obj != target and obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    for action in imported_actions:
+        if action != target_action and action.name in bpy.data.actions and action.users == 0:
+            bpy.data.actions.remove(action)
+    if old_target_action and old_target_action != target_action and old_target_action.users == 0:
+        bpy.data.actions.remove(old_target_action)
+
+    chains: dict[str, list[str]] = profile.get("chains", {})
+    leg_chains = profile.get("leg_chains", [])
+    if not isinstance(leg_chains, list) or any(name not in chains for name in leg_chains):
+        raise TaskError("leg_chains must list names defined in chains")
+    inverse_mapping = {target_name: source_name for source_name, target_name in mapping.items()}
+    maximum_gap = float(profile.get("maximum_chain_gap", 1.0e-5))
+    maximum_angle_delta = float(profile.get("maximum_joint_angle_delta_degrees", 2.0))
+    minimum_pose_dot = float(profile.get("minimum_pose_direction_dot", 0.999))
+    target_frames: list[dict[str, Any]] = []
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    target_world_rotation = normalized_rotation(target.matrix_world)
+    for output_frame, sample in enumerate(samples, start=1):
+        scene.frame_set(output_frame)
+        bpy.context.view_layer.update()
+        frame_metrics: dict[str, Any] = {"frame": output_frame, "chains": {}}
+        for source_name, target_name in mapping.items():
+            pose = target.pose.bones[target_name]
+            actual = (target_world_rotation @ (pose.tail-pose.head)).normalized()
+            if source_name in absolute_orientation_set:
+                expected = sample["directions"][source_name]
+            else:
+                expected = (sample["deltas"][source_name] @ target_rest_directions[target_name]).normalized()
+            dot = actual.dot(expected)
+            if dot < minimum_pose_dot:
+                issue(
+                    issues,
+                    "error",
+                    "humanoid.pose_direction_mismatch",
+                    f"Target bone {target_name!r} diverges from the transferred source motion",
+                    target_bone=target_name,
+                    frame=output_frame,
+                    direction_dot=dot,
+                    minimum=minimum_pose_dot,
+                )
+        for chain_name, bone_names in chains.items():
+            poses = [target.pose.bones[name] for name in bone_names]
+            gaps = [(poses[i].tail-poses[i+1].head).length for i in range(len(poses)-1)]
+            target_angles = [
+                math.degrees((poses[i].tail-poses[i].head).angle(poses[i+1].tail-poses[i+1].head))
+                for i in range(len(poses)-1)
+            ]
+            source_names = [inverse_mapping.get(name) for name in bone_names]
+            source_angles: list[float] = []
+            angle_deltas: list[float] = []
+            if all(source_names):
+                source_directions = [sample["directions"][name] for name in source_names]
+                source_angles = [
+                    math.degrees(source_directions[i].angle(source_directions[i+1]))
+                    for i in range(len(source_directions)-1)
+                ]
+                angle_deltas = [abs(a-b) for a, b in zip(target_angles, source_angles)]
+            frame_metrics["chains"][chain_name] = {
+                "gaps": gaps,
+                "target_angles": target_angles,
+                "source_angles": source_angles,
+                "angle_deltas": angle_deltas,
+            }
+            if gaps and max(gaps) > maximum_gap:
+                issue(
+                    issues,
+                    "error",
+                    "humanoid.chain_gap",
+                    f"Target chain {chain_name!r} is disconnected",
+                    frame=output_frame,
+                    maximum_gap=max(gaps),
+                    tolerance=maximum_gap,
+                )
+            if angle_deltas and max(angle_deltas) > maximum_angle_delta:
+                issue(
+                    issues,
+                    "error",
+                    "humanoid.joint_angle_mismatch",
+                    f"Target chain {chain_name!r} no longer matches the human control",
+                    frame=output_frame,
+                    maximum_delta=max(angle_deltas),
+                    tolerance=maximum_angle_delta,
+                )
+            if chain_name in leg_chains:
+                hip = target.matrix_world @ poses[0].head
+                knee = target.matrix_world @ poses[0].tail
+                ankle = target.matrix_world @ poses[1].tail
+                ordering = hip.z > knee.z > ankle.z
+                frame_metrics["chains"][chain_name]["hip_knee_ankle_ordered"] = ordering
+                if not ordering:
+                    issue(
+                        issues,
+                        "error",
+                        "humanoid.leg_ordering",
+                        f"Target leg {chain_name!r} does not read hip > knee > ankle",
+                        frame=output_frame,
+                        hip_z=hip.z,
+                        knee_z=knee.z,
+                        ankle_z=ankle.z,
+                    )
+        facing = profile.get("facing")
+        if facing is not None:
+            if not isinstance(facing, dict):
+                raise TaskError("facing must be an object")
+            origin = evaluated_object_center(str(facing.get("origin_object", "")), depsgraph)
+            front = evaluated_object_center(str(facing.get("front_object", "")), depsgraph)
+            declared = parse_axis(str(facing.get("axis", profile.get("forward_axis", "-Y"))))
+            declared_world = (target_world_rotation @ declared).normalized()
+            actual = (front-origin).normalized()
+            facing_dot = actual.dot(declared_world)
+            frame_metrics["facing_dot"] = facing_dot
+            minimum_facing = float(facing.get("minimum_dot", 0.75))
+            if facing_dot < minimum_facing:
+                issue(
+                    issues,
+                    "error",
+                    "humanoid.facing_mismatch",
+                    "Deformed facing markers disagree with declared character forward",
+                    frame=output_frame,
+                    facing_dot=facing_dot,
+                    minimum=minimum_facing,
+                )
+        target_frames.append(frame_metrics)
+
+    attachments = profile.get("attachments", [])
+    if not isinstance(attachments, list):
+        raise TaskError("attachments must be a list")
+    attachment_metrics = []
+    for attachment in attachments:
+        if not isinstance(attachment, dict):
+            raise TaskError("Each attachment must be an object")
+        pattern = str(attachment.get("object_pattern", ""))
+        bone_name = str(attachment.get("bone", ""))
+        matches = [obj for obj in bpy.context.scene.objects if fnmatch.fnmatchcase(obj.name, pattern)]
+        valid = [obj.name for obj in matches if object_bound_to_bone(obj, target, bone_name)]
+        attachment_metrics.append(
+            {"pattern": pattern, "bone": bone_name, "matched": [obj.name for obj in matches], "valid": valid}
+        )
+        if not matches or len(valid) != len(matches):
+            issue(
+                issues,
+                "error",
+                "humanoid.attachment_mismatch",
+                f"Attachment pattern {pattern!r} is not fully bound to {bone_name!r}",
+                matched=[obj.name for obj in matches],
+                valid=valid,
+            )
+
+    if args.review_dir:
+        review_outputs.extend(
+            render_humanoid_review(
+                target,
+                list(range(1, len(samples)+1)),
+                path_from_user(args.review_dir, kind="review directory"),
+                "target",
+                resolution=int(profile.get("review_resolution", 256)),
+                forward_axis=forward_axis,
+            )
+        )
+        report["outputs"]["review_frames"] = review_outputs
+
+    report["issues"] = issues
+    report["errors"].extend(item for item in issues if item["severity"] == "error")
+    report["warnings"].extend(item for item in issues if item["severity"] == "warning")
+    report["passed"] = not any(item["severity"] == "error" for item in issues)
+    report["metrics"].update(
+        {
+            "method": "rest-relative-global",
+            "absolute_orientation_bones": sorted(absolute_orientation_set),
+            "source_armature": resolved_source_name,
+            "target_armature": target.name,
+            "source_action": source_action_name,
+            "target_action": target_action.name,
+            "source_fps": source_fps,
+            "output_fps": output_fps,
+            "source_frames": source_frames,
+            "output_frames": list(range(1, len(samples)+1)),
+            "rest_alignment": rest_metrics,
+            "target_frames": target_frames,
+            "attachments": attachment_metrics,
+            "error_count": len(report["errors"]),
+            "warning_count": len(report["warnings"]),
+        }
+    )
+    change(
+        report,
+        "Baked rest-relative global humanoid retarget with semantic proof",
+        mapped_bones=len(mapping),
+        sampled_frames=len(samples),
+    )
+    save_optional_output(args, report, input_path)
+
+
 def task_retarget(args: argparse.Namespace, report: dict[str, Any]) -> None:
     input_path = load_input(args, report)
     source = get_armature(args.source_armature)
@@ -4410,6 +5056,26 @@ def build_parser() -> argparse.ArgumentParser:
     retarget_parser.add_argument("--action-name")
     retarget_parser.add_argument("--replace-existing", action="store_true")
     retarget_parser.set_defaults(handler=task_retarget)
+
+    humanoid_retarget_parser = subparsers.add_parser(
+        "humanoid-retarget",
+        help=(
+            "Bake profile-driven rest-relative global humanoid motion and "
+            "prove chains, joint angles, facing, and attachments"
+        ),
+    )
+    add_mutation_flags(humanoid_retarget_parser)
+    humanoid_retarget_parser.add_argument(
+        "--source-animation",
+        help="External .glb/.gltf/.fbx control animation; omit when the source rig is already in --input",
+    )
+    humanoid_retarget_parser.add_argument("--profile", required=True)
+    humanoid_retarget_parser.add_argument("--action-name")
+    humanoid_retarget_parser.add_argument(
+        "--review-dir",
+        help="Render front, side, and isometric control/target PNG sequences",
+    )
+    humanoid_retarget_parser.set_defaults(handler=task_humanoid_retarget)
 
     return parser
 
