@@ -21,6 +21,9 @@ Turn the request into the best practical asset, not a description of how one mig
      generated concept remains reference-only for structured hard-surface assets.
    - Use `forge3d process` for an existing model.
    - Use `forge3d rig`, `forge3d animate`, or `forge3d retarget` for character work.
+   - For a stylized, chibi, rigid-piece, or pixel-rendered humanoid driven by an
+     existing human animation, read [humanoid-retarget.md](references/humanoid-retarget.md)
+     and use `forge3d humanoid-retarget` instead of local constraint copying.
 5. Work in a new versioned output folder. Never overwrite an artist-owned `.blend`.
 6. Use deterministic Blender tasks for repeatable mesh, UV, material, rig, animation, LOD, collision, and export operations.
 7. Inspect the real result through Blender MCP. Review scene structure and a

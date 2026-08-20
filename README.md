@@ -144,8 +144,14 @@ forge3d process --help
 forge3d rig --help
 forge3d animate --help
 forge3d retarget --help
+forge3d humanoid-retarget --help
 forge3d validate --help
 ```
+
+For stylized humanoids, `humanoid-retarget` uses an untouched human control,
+a target T/A-pose, and a versioned profile to transfer rest-relative global
+motion while proving limb chains, human leg ordering, deformed facing, and
+equipment attachment. See [`docs/humanoid-retarget.md`](docs/humanoid-retarget.md).
 
 Launch Blender with its local MCP bridge when an interactive review is needed:
 
@@ -233,8 +239,9 @@ reviewed in the GDGS scene with its collision proxy enabled.
 - Authored modelling is targeted procedural Blender work assisted by an LLM,
   not a universal text-to-mesh model. Organic characters still need an
   appropriate source mesh or deliberately selected reconstruction backend.
-- Rigging and retargeting work, but each production asset still needs
-  deformation, foot-contact, loop, and root-motion review.
+- The humanoid proof catches rest-axis, joint-chain, facing, and attachment
+  failures, but each production asset still needs played visual approval plus
+  foot-contact, loop, and root-motion review.
 - Gaussian splats are static visual props. They do not provide normal polygon
   editing, skeletal deformation, or ordinary GLB export.
 - The bundled controller `.splat` is an 8 MB demonstration asset. Larger runs

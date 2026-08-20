@@ -1,6 +1,6 @@
 {
   "name": "forge3d",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260814053407",
   "description": "Prompt-first local workflows for creating game-ready 3D assets with Blender and Godot.",
   "author": {
     "name": "Local developer"

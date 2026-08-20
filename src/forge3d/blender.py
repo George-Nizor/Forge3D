@@ -32,6 +32,7 @@ SUPPORTED_TASKS = frozenset(
         "rig-validate",
         "animation-validate",
         "retarget",
+        "humanoid-retarget",
     }
 )
 

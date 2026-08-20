@@ -13,6 +13,7 @@ $TaskRunner = Join-Path $BlenderRoot "forge3d_task.py"
 $RigFixture = Join-Path $Here "create_rig_fixture.py"
 $HumanoidFixture = Join-Path $Here "create_humanoid_fixture.py"
 $BoneMap = Join-Path $Here "fixtures\simple_bone_map.json"
+$HumanoidRetargetProfile = Join-Path $Here "fixtures\humanoid_retarget_profile.json"
 $Work = Join-Path ([System.IO.Path]::GetTempPath()) (
     "forge3d-blender-smoke-" + [guid]::NewGuid().ToString("N")
 )
@@ -224,6 +225,31 @@ try {
         throw "Retarget cleanup removed or leaked constraints on the target rig"
     }
 
+    $HumanoidRetargeted = Join-Path $Work "humanoid_retargeted.blend"
+    $HumanoidRetargetReport = Join-Path $Work "15a_humanoid_retarget.json"
+    Invoke-Task @(
+        "humanoid-retarget", "--input", $RigBlend,
+        "--profile", $HumanoidRetargetProfile,
+        "--action-name", "HumanoidProofWave",
+        "--output", $HumanoidRetargeted,
+        "--report", $HumanoidRetargetReport
+    )
+    $HumanoidProof = Get-Content -Raw -LiteralPath $HumanoidRetargetReport |
+        ConvertFrom-Json
+    if (
+        -not $HumanoidProof.passed -or
+        $HumanoidProof.metrics.method -ne "rest-relative-global" -or
+        $HumanoidProof.metrics.error_count -ne 0 -or
+        $HumanoidProof.metrics.output_frames.Count -ne 3
+    ) {
+        throw "Humanoid rest-relative retarget proof failed"
+    }
+    Invoke-Task @(
+        "animation-validate", "--input", $HumanoidRetargeted,
+        "--actions", "HumanoidProofWave",
+        "--report", (Join-Path $Work "15b_humanoid_animation.json")
+    )
+
     $HumanoidMesh = Join-Path $Work "humanoid_proxy.blend"
     & $Blender --background --factory-startup --python $HumanoidFixture `
         -- --output $HumanoidMesh | Out-Null
@@ -261,7 +287,7 @@ try {
 
     foreach ($Expected in @(
         $Collision, $Preview, $Glb, $CaseSource, $CasePreview, $CaseGlb,
-        $Retargeted, $AutoRigged, $RigifyGlb
+        $Retargeted, $HumanoidRetargeted, $AutoRigged, $RigifyGlb
     )) {
         if (-not (Test-Path -LiteralPath $Expected -PathType Leaf)) {
             throw "Expected smoke-test output is missing: $Expected"

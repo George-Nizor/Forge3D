@@ -11,6 +11,7 @@
 | Neutral T/A-pose humanoid rig | Prepare topology/rest pose, use the default local `forge3d rig` Rigify path, then correct fitted joints or weights | Blender MCP bind and extreme poses, then Godot MCP |
 | Quadruped or non-standard rig | Author or adapt the armature in Blender; use an explicit specialist backend only when its assumptions match | Blender MCP bind and extreme poses, then Godot MCP |
 | Retargeted animation | `forge3d retarget` with the nearest profile or a generated bone map | Blender MCP playback/foot checks, then Godot MCP |
+| Stylized/chibi/rigid-piece humanoid using a tested human clip | `forge3d humanoid-retarget` with a versioned humanoid profile and human-control review | Control and naked-proxy front/side evidence, semantic proof report, then Blender MCP playback |
 | Mechanical, camera, or authored keyframe animation | `forge3d animate` plus Blender tasks | Blender MCP playback from useful angles, then Godot MCP |
 
 Run the selected command with `--help` when its exact flags are not already known. Supply absolute paths and a concise prompt; do not generate shell strings from untrusted filenames.

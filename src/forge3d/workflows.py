@@ -481,6 +481,123 @@ def retarget_animation(
     return run
 
 
+def humanoid_retarget_animation(
+    *,
+    target: Path,
+    source_animation: Path,
+    profile: Path,
+    name: str | None = None,
+    output_base: Path | None = None,
+    render_review: bool = True,
+    blender: Blender | None = None,
+) -> Run:
+    """Retarget a tested humanoid control onto a target and prove anatomy.
+
+    Unlike the legacy local-space constraint scaffold, this workflow delegates
+    to Blender's rest-relative global retarget task.  The profile owns the bone
+    map, sample frames, semantic chains, facing markers, attachment checks, and
+    playback rates so a successful character experiment can be repeated.
+    """
+    target = target.expanduser().resolve()
+    source_animation = source_animation.expanduser().resolve()
+    profile = profile.expanduser().resolve()
+    run = Run.create(
+        name=name or f"{target.stem}-humanoid-retarget",
+        command="humanoid-retarget",
+        inputs=[target, source_animation, profile],
+        base=output_base,
+        settings={
+            "method": "rest-relative-global",
+            "profile": str(profile),
+            "render_review": render_review,
+        },
+    )
+    action_name = f"{run.directory.name}_HumanoidRetarget"
+    run.manifest["settings"]["action_name"] = action_name
+    run.write()
+    blender = blender or Blender()
+    run.record_tool("blender", {"version": blender.version()})
+
+    canonical = run.directory / "source.blend"
+    retarget_report = run.directory / "humanoid-retarget.json"
+    review_dir = run.directory / "review" if render_review else None
+    step = run.start_step("humanoid-retarget", backend="blender")
+    try:
+        task_args: dict[str, Any] = {
+            "input": target,
+            "source_animation": source_animation,
+            "profile": profile,
+            "output": canonical,
+            "report": retarget_report,
+            "action_name": action_name,
+        }
+        if review_dir is not None:
+            task_args["review_dir"] = review_dir
+        blender.task("humanoid-retarget", task_args, timeout=3_600)
+        _require_output(canonical, "Blender humanoid retarget task")
+        _require_output(retarget_report, "Blender humanoid retarget report")
+        semantic_validation = _load_report(retarget_report)
+        outputs: dict[str, Path] = {
+            "source_blend": canonical,
+            "humanoid_retarget_report": retarget_report,
+        }
+        if review_dir is not None:
+            outputs["review_directory"] = review_dir
+        run.finish_step(step, outputs=outputs)
+    except Exception as exc:
+        run.fail_step(step, exc)
+        raise
+
+    rig_report = run.directory / "rig-validation.json"
+    step = run.start_step("rig-validate", backend="blender")
+    try:
+        blender.task("rig-validate", {"input": canonical, "report": rig_report})
+        rig_validation = _load_report(rig_report)
+        run.finish_step(step, outputs={"rig_validation_report": rig_report})
+    except Exception as exc:
+        run.fail_step(step, exc)
+        raise
+
+    animation_report = run.directory / "animation-validation.json"
+    step = run.start_step("animation-validate", backend="blender")
+    try:
+        blender.task(
+            "animation-validate",
+            {
+                "input": canonical,
+                "report": animation_report,
+                "actions": action_name,
+            },
+        )
+        animation_validation = _load_report(animation_report)
+        run.finish_step(
+            step, outputs={"animation_validation_report": animation_report}
+        )
+    except Exception as exc:
+        run.fail_step(step, exc)
+        raise
+
+    profile_data = json.loads(profile.read_text(encoding="utf-8"))
+    target_armature = profile_data.get("target_armature")
+    if not isinstance(target_armature, str) or not target_armature:
+        raise Forge3DError("Humanoid profile requires target_armature")
+    _export_game_outputs(
+        run,
+        blender,
+        canonical,
+        export_args={"armature": target_armature, "actions": action_name},
+        preview_args={"armature": target_armature},
+    )
+    run.complete(
+        validation={
+            "semantic": semantic_validation,
+            "rig": rig_validation,
+            "animation": animation_validation,
+        }
+    )
+    return run
+
+
 def prepare_animation_request(
     *,
     source: Path,
