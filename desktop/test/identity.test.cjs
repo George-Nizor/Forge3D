@@ -25,15 +25,39 @@ test("approved Logo A is the canonical desktop identity", () => {
   assert.match(styles, /--display: "Space Grotesk"/);
 });
 
-test("approved UI A keeps the run library and inspector as permanent workstation panes", () => {
-  assert.match(renderer, /class="app-bar"/);
-  assert.match(renderer, /class="pane library"/);
-  assert.match(renderer, /class="viewport-tools"/);
-  assert.match(renderer, /class="pane inspector"/);
-  assert.match(renderer, /class="status-bar"/);
+test("approved UI B keeps the viewport-first alignment composition", () => {
+  // Instrumenta/docs/design-references/forge3d-ui-claude-alignment-reference.png
+  assert.match(renderer, /class="topbar"/);
+  assert.match(renderer, /class="omnibox"/);
+  assert.match(renderer, /class="run-button"/);
+  assert.match(renderer, /class="stage"/);
+  assert.match(renderer, /id="preview" class="viewport"/);
+  assert.match(renderer, /class="toolrail"/);
+  assert.match(renderer, /class="panel library"/);
+  assert.match(renderer, /class="panel inspector"/);
+  assert.match(renderer, /class="edge-tab"/);
+  assert.match(renderer, /class="dock"/);
+  assert.match(renderer, /id="pipeline"/);
+  assert.match(renderer, /id="filmstrip"/);
+  assert.match(renderer, /class="statusbar"/);
   assert.match(renderer, /const glyphs = \{/);
-  assert.doesNotMatch(renderer, /class="production-rail"|class="drawer library"|class="drawer inspector"|class="edge-tab"/);
-  assert.doesNotMatch(renderer, /SPATIAL CANVAS|PRODUCTION|Waiting for a brief|Shape the next thing/);
-  assert.match(styles, /grid-template-columns: clamp\(218px, 16vw, 278px\)/);
-  assert.match(styles, /grid-template-rows: 35px 39px minmax\(0,1fr\) 105px/);
+  assert.doesNotMatch(renderer, /class="app-bar"|class="pane library"|class="pane inspector"|class="production-rail"/);
+  assert.match(styles, /--topbar-h: 72px/);
+  assert.match(styles, /grid-template-rows: var\(--topbar-h\) minmax\(0, 1fr\) var\(--dock-h\) var\(--status-h\)/);
+});
+
+test("the pipeline dock reports the four production stages", () => {
+  for (const label of ["Plan", "Build", "Check", "Output"]) {
+    assert.match(renderer, new RegExp(`label: "${label}"`));
+  }
+  assert.match(renderer, /function pipelineStages\(/);
+});
+
+test("the Windows caption is replaced by the in-app bar without weakening isolation", () => {
+  const main = fs.readFileSync(path.join(desktopRoot, "src", "main.cjs"), "utf8");
+  assert.match(main, /process\.platform !== "win32"/);
+  assert.match(main, /titleBarStyle: "hidden"/);
+  assert.match(main, /titleBarOverlay: \{/);
+  assert.match(styles, /-webkit-app-region: drag/);
+  assert.match(styles, /-webkit-app-region: no-drag/);
 });

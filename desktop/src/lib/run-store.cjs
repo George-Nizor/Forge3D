@@ -25,10 +25,29 @@ function sha256(filePath) {
   return hash.digest("hex");
 }
 
+const RENAME_RETRY_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
+
+function renameWithRetry(source, target) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      fs.renameSync(source, target);
+      return;
+    } catch (error) {
+      if (!["EPERM", "EACCES", "EBUSY"].includes(error.code) || attempt === 5) throw error;
+      Atomics.wait(RENAME_RETRY_SIGNAL, 0, 0, 10 * (2 ** attempt));
+    }
+  }
+}
+
 function atomicWriteJson(filePath, value) {
   const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
-  fs.renameSync(temporary, filePath);
+  try {
+    renameWithRetry(temporary, filePath);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 
 function uniqueLeaf(directory, requested) {
@@ -204,12 +223,34 @@ class RunStore {
     });
   }
 
-  appendEvent(runId, event) {
+  appendEvents(runId, events) {
+    if (!Array.isArray(events) || !events.length) return this.find(runId, false).manifest;
+    const mergeable = new Set(["agent", "log", "delta", "app-server-stderr"]);
     return this.update(runId, (manifest) => {
       manifest.transcript ||= [];
-      manifest.transcript.push({ at: timestamp(), ...event });
-      if (manifest.transcript.length > 5000) manifest.transcript.splice(0, manifest.transcript.length - 5000);
+      for (const event of events) {
+        const next = { at: timestamp(), ...event };
+        const previous = manifest.transcript.at(-1);
+        const canMerge = previous
+          && mergeable.has(next.kind)
+          && previous.kind === next.kind
+          && previous.method === next.method
+          && typeof previous.text === "string"
+          && typeof next.text === "string"
+          && previous.text.length < 50000;
+        if (canMerge) {
+          previous.text = `${previous.text}${next.text}`.slice(-50000);
+          previous.at = next.at;
+        } else {
+          manifest.transcript.push(next);
+        }
+      }
+      if (manifest.transcript.length > 1200) manifest.transcript.splice(0, manifest.transcript.length - 1200);
     });
+  }
+
+  appendEvent(runId, event) {
+    return this.appendEvents(runId, [event]);
   }
 
   refreshArtifacts(runId) {
@@ -223,7 +264,8 @@ class RunStore {
     const recovered = [];
     for (const manifest of this.list()) {
       if (manifest.archived || !ACTIVE_STATUSES.has(manifest.status)) continue;
-      recovered.push(this.setStatus(manifest.run_id, "interrupted", "Forge3D recovered this job after the desktop process stopped unexpectedly."));
+      this.setStatus(manifest.run_id, "interrupted", "Forge3D recovered this job after the desktop process stopped unexpectedly.");
+      recovered.push(this.refreshArtifacts(manifest.run_id));
     }
     return recovered;
   }

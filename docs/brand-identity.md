@@ -32,15 +32,24 @@ Space Grotesk 500/600 is the Forge3D wordmark and display face. The exact Fontso
 bundled under the SIL Open Font License 1.1. Controls use Segoe UI Variable with Segoe UI and system
 fallbacks, matching Instrumenta and its other Windows products.
 
-## Interface expression — approved UI A
+## Interface expression — approved UI B
 
-Forge3D follows the approved **UI A workstation** composition:
+Forge3D follows the **viewport-first workstation** composition captured in
+the approved alignment reference
+(`Instrumenta/docs/design-references/forge3d-ui-claude-alignment-reference.png`):
 
-- A compact application bar with the Logo A wordmark and icon-only actions.
-- A permanent run library on the left with New Run, search, grouped runs, and timestamps.
-- A central viewport with a dense icon toolbar and no instructional title/subtitle overlay.
-- A permanent Steps/Artifacts/Validation/Logs inspector on the right.
-- A prompt composer docked under the viewport with attachment, controls, Run, and cancel actions.
-- One compact bottom status bar for toolchain, Codex, Blender, Godot, and WSL readiness.
-- Mostly square corners, fine separators, compact typography, and no dashboard cards, edge drawers,
-  production rail, numbered stages, marketing subtitle, or explanatory copy beneath every control.
+- One application bar holding the Logo A wordmark, a wide prompt omnibox, Attach, run settings,
+  and a single orange Run action. On Windows the native caption is hidden and the system window
+  controls are drawn over the reserved inset at the right of that bar.
+- A full-bleed viewport underneath it. With no output it shows a studio backdrop with a receding
+  ground grid and the mark as a watermark.
+- A floating viewport tool rail on the left: orbit, pan, frame, ground grid, the three shading
+  modes, capture, and fullscreen.
+- Floating dark panels on the right for the run library and the Steps / Files / Checks / Logs
+  inspector. Both collapse to vertical edge tabs so the viewport can run edge to edge.
+- A production dock across the bottom: the Plan, Build, Check, Output pipeline derived from real
+  run state, and a filmstrip of the run's outputs.
+- One hairline status bar for toolchain, Codex, Blender, Godot, and WSL readiness.
+- Rounded but restrained corners, hairline borders, compact uppercase display labels, and copper
+  orange reserved for the primary action, the active tool, and the running stage. No dashboard
+  cards, numbered stages, marketing subtitle, or explanatory copy beneath every control.

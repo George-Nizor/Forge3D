@@ -109,13 +109,19 @@ class CodexAppServerClient extends EventEmitter {
     this._write({ id: requestId, result });
   }
 
+  reject(requestId, message = "Unsupported App Server request") {
+    if (!this.serverRequests.has(requestId)) throw new Error(`Unknown App Server request ${requestId}`);
+    this.serverRequests.delete(requestId);
+    this._write({ id: requestId, error: { code: -32601, message } });
+  }
+
   async listSkills(cwd, forceReload = false) {
     const result = await this.request("skills/list", { cwds: [cwd], forceReload });
     return result?.data?.flatMap((entry) => entry.skills || []) || [];
   }
 
   async startThread({ cwd, model }) {
-    const params = { cwd, approvalPolicy: "unlessTrusted" };
+    const params = { cwd, approvalPolicy: "on-request" };
     if (model && model !== "auto") params.model = model;
     const result = await this.request("thread/start", params);
     return result.thread;
@@ -134,7 +140,7 @@ class CodexAppServerClient extends EventEmitter {
       threadId,
       input,
       cwd,
-      approvalPolicy: "unlessTrusted",
+      approvalPolicy: "on-request",
       sandboxPolicy: {
         type: "workspaceWrite",
         writableRoots: [cwd],
@@ -162,6 +168,17 @@ class CodexAppServerClient extends EventEmitter {
   decide(requestId, decision) {
     const allowed = new Set(["accept", "acceptForSession", "decline", "cancel"]);
     if (!allowed.has(decision)) throw new Error("Invalid approval decision");
+    const request = this.serverRequests.get(requestId);
+    if (!request) throw new Error(`Unknown App Server request ${requestId}`);
+    if (request.method === "mcpServer/elicitation/request") {
+      const action = decision === "accept" || decision === "acceptForSession" ? "accept" : decision;
+      this.respond(requestId, {
+        action,
+        content: action === "accept" ? {} : null,
+        _meta: decision === "acceptForSession" ? { persist: "session" } : null,
+      });
+      return;
+    }
     this.respond(requestId, { decision });
   }
 

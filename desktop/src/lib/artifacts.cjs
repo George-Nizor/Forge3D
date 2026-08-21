@@ -16,6 +16,8 @@ const MEDIA_TYPES = new Map([
   [".ply", "application/x-ply"],
   [".sog", "application/x-gaussian-splat"],
   [".splat", "application/x-gaussian-splat"],
+  [".spz", "application/x-gaussian-splat"],
+  [".ksplat", "application/x-gaussian-splat"],
   [".txt", "text/plain"],
   [".webp", "image/webp"],
   [".png", "image/png"],
@@ -30,7 +32,7 @@ function classify(relativePath) {
   if (IMAGE_EXTENSIONS.has(extension)) previewRole = lower.includes("preview") ? "primary-image" : "image";
   else if (extension === ".gif") previewRole = "animation";
   else if (extension === ".glb" || extension === ".gltf") previewRole = "model";
-  else if (extension === ".splat" || extension === ".sog" || extension === ".ply") previewRole = "gaussian-splat";
+  else if ([".splat", ".sog", ".spz", ".ksplat", ".ply"].includes(extension)) previewRole = "gaussian-splat";
   else if (extension === ".json" && lower.includes("validation")) previewRole = "validation";
   else if ([".json", ".log", ".md", ".txt"].includes(extension)) previewRole = "text";
   return {
@@ -48,7 +50,7 @@ function walk(root, current = root, depth = 0) {
     const stat = fs.lstatSync(absolute);
     if (stat.isSymbolicLink()) continue;
     if (stat.isDirectory()) files.push(...walk(root, absolute, depth + 1));
-    else if (stat.isFile() && entry.name !== "run.json") files.push(absolute);
+    else if (stat.isFile() && entry.name !== "run.json" && !/^run\.json\..*\.tmp$/i.test(entry.name) && !/\.(tmp|partial)$/i.test(entry.name)) files.push(absolute);
   }
   return files;
 }

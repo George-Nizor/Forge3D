@@ -11,6 +11,30 @@ function temporaryDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "forge3d-run-store-"));
 }
 
+test("atomic writes retry transient Windows file locks and remove their temporary file", (t) => {
+  const root = temporaryDirectory();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, "run.json");
+  atomicWriteJson(file, { revision: 1 });
+  const originalRename = fs.renameSync;
+  let failures = 2;
+  fs.renameSync = (source, target) => {
+    if (target === file && failures > 0) {
+      failures -= 1;
+      const error = new Error("temporarily locked");
+      error.code = "EPERM";
+      throw error;
+    }
+    return originalRename(source, target);
+  };
+  try {
+    atomicWriteJson(file, { revision: 2 });
+  } finally {
+    fs.renameSync = originalRename;
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), { revision: 2 });
+  assert.equal(fs.readdirSync(root).filter((name) => name.endsWith(".tmp")).length, 0);
+});
 test("creates contained schema-v2 runs and copies attachments", async (t) => {
   const root = temporaryDirectory();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -35,11 +59,13 @@ test("reads schema v1, recovers interrupted runs, and scans image sequences", as
   fs.mkdirSync(sequence);
   fs.writeFileSync(path.join(sequence, "frame-001.png"), "one");
   fs.writeFileSync(path.join(sequence, "frame-002.png"), "two");
+  fs.writeFileSync(path.join(directory, "run.json.1234.leftover.tmp"), "not an artifact");
   store.setStatus(run.run_id, "running");
-  assert.equal(store.recoverInterrupted()[0].status, "interrupted");
-  const refreshed = store.refreshArtifacts(run.run_id);
-  assert.equal(refreshed.artifacts[0].preview_role, "image-sequence");
-  assert.deepEqual(refreshed.artifacts[0].frames, ["turntable/frame-001.png", "turntable/frame-002.png"]);
+  const recovered = store.recoverInterrupted()[0];
+  assert.equal(recovered.status, "interrupted");
+  assert.equal(recovered.artifacts[0].preview_role, "image-sequence");
+  assert.deepEqual(recovered.artifacts[0].frames, ["turntable/frame-001.png", "turntable/frame-002.png"]);
+  assert.equal(recovered.artifacts.some((artifact) => artifact.name.includes("run.json.")), false);
 
   const legacyDirectory = path.join(store.root, "legacy");
   fs.mkdirSync(legacyDirectory);
@@ -56,6 +82,21 @@ test("reads schema v1, recovers interrupted runs, and scans image sequences", as
   const loaded = store.find("2ac676af-46f1-4d5f-a479-9ba6549698c4").manifest;
   assert.equal(loaded.schema_version, 1);
   assert.equal(loaded.artifacts[0].preview_role, "primary-image");
+});
+
+test("batches and coalesces streaming transcript fragments", async (t) => {
+  const root = temporaryDirectory();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const store = new RunStore(path.join(root, "runs"));
+  const run = await store.create({ prompt: "Stream a result" });
+  store.appendEvents(run.run_id, Array.from({ length: 100 }, (_, index) => ({
+    kind: "agent",
+    method: "item/agentMessage/delta",
+    text: String(index % 10),
+  })));
+  const loaded = store.find(run.run_id).manifest;
+  assert.equal(loaded.transcript.length, 1);
+  assert.equal(loaded.transcript[0].text.length, 100);
 });
 
 test("duplicate creates a new version and archive stays browsable", async (t) => {

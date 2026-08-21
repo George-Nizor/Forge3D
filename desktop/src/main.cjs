@@ -15,6 +15,8 @@ const {
   session,
   shell,
 } = require("electron");
+
+const TITLE_BAR_HEIGHT = 72;
 const { CodexAppServerClient } = require("./lib/codex-client.cjs");
 const { RunStore } = require("./lib/run-store.cjs");
 const {
@@ -23,14 +25,16 @@ const {
   ensureRuntimeState,
   findCodexExecutable,
   inspectForgeSkill,
+  primeGodotProject,
   repairForgePlugin,
 } = require("./lib/runtime.cjs");
 const { resolveContained } = require("./lib/path-policy.cjs");
+const { automaticApproval } = require("./lib/approval-policy.cjs");
 
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "forge3d-artifact",
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
   },
 ]);
 
@@ -41,6 +45,16 @@ let codexClient = null;
 let currentSkill = null;
 let activeJob = null;
 let appServerError = null;
+let detectedTools = null;
+let runEventTimer = null;
+let godotPrimePromise = Promise.resolve();
+const pendingRunEvents = new Map();
+const VISIBLE_ITEM_TYPES = new Set(["commandExecution", "mcpToolCall", "fileChange", "dynamicToolCall", "imageGeneration", "webSearch"]);
+const APPROVAL_METHODS = new Set([
+  "item/commandExecution/requestApproval",
+  "item/fileChange/requestApproval",
+  "mcpServer/elicitation/request",
+]);
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const bundledPlugin = () => app.isPackaged
@@ -82,19 +96,56 @@ function compact(value, depth = 0) {
   return value;
 }
 
+function externalTools(force = false) {
+  if (force || !detectedTools) detectedTools = detectExternalTools(runtimeState.root);
+  return detectedTools;
+}
+
 function currentState() {
   return {
     version: BUNDLE_VERSION,
     activeJob,
     appServerError,
     skill: currentSkill,
-    tools: detectExternalTools(runtimeState.root),
+    tools: externalTools(),
     runs: runStore.list(),
   };
 }
 
 function sendState() {
   send("forge3d:state", currentState());
+}
+
+function queueRunEvent(runId, event) {
+  const queued = pendingRunEvents.get(runId) || [];
+  queued.push(event);
+  pendingRunEvents.set(runId, queued);
+  if (!runEventTimer) runEventTimer = setTimeout(flushRunEvents, 220);
+}
+
+function flushRunEvents() {
+  if (runEventTimer) clearTimeout(runEventTimer);
+  runEventTimer = null;
+  let count = 0;
+  for (const [runId, events] of pendingRunEvents) {
+    pendingRunEvents.delete(runId);
+    if (!events.length) continue;
+    runStore.appendEvents(runId, events);
+    count += events.length;
+  }
+  if (count) send("forge3d:event", { refresh: true, count });
+}
+
+function failActiveJob(error) {
+  const message = `Forge3D could not process Codex activity: ${error.message}`;
+  appServerError = message;
+  send("forge3d:error", message);
+  try { flushRunEvents(); } catch {}
+  if (activeJob) {
+    try { runStore.setStatus(activeJob.runId, "failed", message); } catch {}
+    activeJob = null;
+  }
+  try { sendState(); } catch {}
 }
 
 async function ensureCodex() {
@@ -110,13 +161,18 @@ async function ensureCodex() {
     FORGE3D_STATE_ROOT: runtimeState.root,
   };
   codexClient = new CodexAppServerClient({ command: executable, cwd: runStore.root, env });
-  codexClient.on("notification", onCodexNotification);
-  codexClient.on("request", onCodexRequest);
+  codexClient.on("notification", (message) => {
+    try { onCodexNotification(message); } catch (error) { failActiveJob(error); }
+  });
+  codexClient.on("request", (message) => {
+    try { onCodexRequest(message); } catch (error) { failActiveJob(error); }
+  });
   codexClient.on("protocolError", (error) => send("forge3d:error", error.message));
   codexClient.on("stderr", (text) => {
-    if (activeJob) runStore.appendEvent(activeJob.runId, { kind: "app-server-stderr", text: String(text).slice(-4000) });
+    if (activeJob) queueRunEvent(activeJob.runId, { kind: "app-server-stderr", text: String(text).slice(-4000) });
   });
   codexClient.on("exit", ({ detail }) => {
+    try { flushRunEvents(); } catch {}
     appServerError = detail || "Codex App Server stopped unexpectedly";
     if (activeJob) {
       runStore.setStatus(activeJob.runId, "failed", appServerError);
@@ -157,7 +213,9 @@ function promptWithPolicy(manifest) {
     "Work only inside this Forge3D run directory. Never overwrite an existing artifact; create a numbered version.",
     cloud,
     `Workflow: ${manifest.workflow_route}; quality: ${manifest.settings?.quality}; target: ${manifest.settings?.target_format}; tool/model: ${manifest.settings?.tool}.`,
-    "Keep run.json and validation evidence current, and return artifact paths relative to this run directory.",
+    "The desktop host has already completed startup diagnostics and selected the requested route. Start production immediately. Do not rerun forge3d doctor, inspect CLI help, reinstall or search for tools, inspect plugin source, or launch review applications unless the first concrete production command fails.",
+    "Use the leanest complete route: one authored build pass and at most one targeted correction. For splat targets, generate one clean reference, run local TripoSplat once, preserve its PLY and SPLAT outputs, make only the minimum proxy needed for interaction, and do not investigate optional KIRI or Godot review integrations. Do not perform redundant screenshots, orbit renders, or validation passes.",
+    "The Forge3D host exclusively owns run.json. Do not create, edit, replace, rename, or delete it. Write validation evidence to separate files and return artifact paths relative to this run directory.",
   ].join("\n\n");
 }
 
@@ -202,19 +260,44 @@ async function beginRun(manifest, { model = "auto", effort = "auto", continuatio
 
 function onCodexRequest(message) {
   const params = message.params || {};
-  if (!activeJob || params.threadId !== activeJob.threadId || (params.turnId && params.turnId !== activeJob.turnId)) {
-    const result = message.method.includes("requestApproval") ? { decision: "cancel" } : { action: "cancel", content: null };
-    codexClient.respond(message.id, result);
+  const supported = APPROVAL_METHODS.has(message.method);
+  if (!supported) {
+    codexClient.reject(message.id, `Forge3D does not support App Server request ${message.method}`);
+    if (activeJob) queueRunEvent(activeJob.runId, { kind: "error", method: message.method, text: "Unsupported App Server request was rejected safely." });
     return;
   }
-  runStore.appendEvent(activeJob.runId, { kind: "approval-request", requestId: message.id, method: message.method, params: compact(params) });
+  if (!activeJob || params.threadId !== activeJob.threadId || (params.turnId && params.turnId !== activeJob.turnId)) {
+    codexClient.decide(message.id, "cancel");
+    return;
+  }
+  const automatic = automaticApproval(message, runStore.runDirectory(activeJob.runId));
+  if (automatic) {
+    codexClient.decide(message.id, automatic.decision);
+    queueRunEvent(activeJob.runId, {
+      kind: "approval-decision",
+      requestId: message.id,
+      method: message.method,
+      decision: automatic.decision,
+      text: automatic.label,
+    });
+    return;
+  }
+  queueRunEvent(activeJob.runId, { kind: "approval-request", requestId: message.id, method: message.method, params: compact(params) });
   send("forge3d:approval", { requestId: message.id, method: message.method, params: compact(params) });
   sendState();
 }
 
+function describeItem(item) {
+  if (Array.isArray(item.command)) return item.command.join(" ");
+  if (typeof item.command === "string") return item.command;
+  if (item.type === "mcpToolCall") return [item.server, item.tool].filter(Boolean).join(" · ") || "MCP tool";
+  if (item.type === "fileChange") return `${item.changes?.length || 0} file change${item.changes?.length === 1 ? "" : "s"}`;
+  return item.name || item.type || "Work";
+}
+
 function updateSteps(runId, method, params) {
   const item = params.item;
-  if (!item?.id) return;
+  if (!item?.id || !VISIBLE_ITEM_TYPES.has(item.type)) return false;
   runStore.update(runId, (manifest) => {
     manifest.steps ||= [];
     let step = manifest.steps.find((candidate) => candidate.item_id === item.id);
@@ -223,30 +306,35 @@ function updateSteps(runId, method, params) {
       manifest.steps.push(step);
     }
     step.status = method === "item/completed" ? (item.status || "completed") : (item.status || "running");
-    step.detail = compact(item);
+    step.detail = describeItem(item).slice(0, 500);
     if (method === "item/completed") step.completed_at = new Date().toISOString();
   });
+  return true;
 }
 
 function onCodexNotification(message) {
-  if (!activeJob) {
-    send("forge3d:event", compact(message));
-    return;
-  }
+  if (!activeJob) return;
   const params = message.params || {};
   const scopedThread = params.threadId || params.thread?.id;
   if (scopedThread && scopedThread !== activeJob.threadId) return;
-  if (message.method === "item/started" || message.method === "item/completed") updateSteps(activeJob.runId, message.method, params);
+
+  const itemLifecycle = message.method === "item/started" || message.method === "item/completed";
+  const visibleItem = itemLifecycle && updateSteps(activeJob.runId, message.method, params);
   const delta = params.delta;
   if (typeof delta === "string") {
-    const kind = message.method.includes("agentMessage") ? "agent" : message.method.includes("outputDelta") ? "log" : "delta";
-    runStore.appendEvent(activeJob.runId, { kind, method: message.method, text: delta.slice(0, 20000) });
-  } else {
-    runStore.appendEvent(activeJob.runId, { kind: "event", method: message.method, params: compact(params) });
+    if (message.method.includes("agentMessage")) {
+      queueRunEvent(activeJob.runId, { kind: "agent", method: message.method, text: delta.slice(0, 20000) });
+    } else if (message.method.includes("outputDelta")) {
+      queueRunEvent(activeJob.runId, { kind: "log", method: message.method, text: delta.slice(0, 20000) });
+    }
+  } else if (visibleItem) {
+    queueRunEvent(activeJob.runId, { kind: "activity", method: message.method, text: describeItem(params.item) });
+  } else if (message.method === "turn/started" || message.method === "turn/completed") {
+    queueRunEvent(activeJob.runId, { kind: "event", method: message.method, text: message.method === "turn/started" ? "Codex turn started." : "Codex turn finished." });
   }
-  send("forge3d:event", compact(message));
 
   if (message.method === "turn/completed") {
+    flushRunEvents();
     const turn = params.turn || {};
     const rawStatus = turn.status || "failed";
     const status = rawStatus === "completed" ? "completed" : rawStatus === "interrupted" ? "interrupted" : "failed";
@@ -258,15 +346,26 @@ function onCodexNotification(message) {
   }
 }
 
+// The renderer paints its own application bar, so on Windows the native caption is
+// hidden and only the system window controls are drawn over the reserved inset.
+function titleBarOptions() {
+  if (process.platform !== "win32") return {};
+  return {
+    titleBarStyle: "hidden",
+    titleBarOverlay: { color: "#0f1013", symbolColor: "#9aa1aa", height: TITLE_BAR_HEIGHT },
+  };
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1540,
     height: 980,
     minWidth: 1100,
     minHeight: 720,
-    backgroundColor: "#0a0d12",
+    backgroundColor: "#0a0a0c",
     title: "Forge3D",
     show: false,
+    ...titleBarOptions(),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -308,7 +407,7 @@ function registerIpc() {
       title: "Add Forge3D attachments",
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "Forge3D inputs", extensions: ["png", "jpg", "jpeg", "webp", "gif", "glb", "gltf", "blend", "fbx", "obj", "ply", "splat", "sog", "json", "txt", "md"] },
+        { name: "Forge3D inputs", extensions: ["png", "jpg", "jpeg", "webp", "gif", "glb", "gltf", "blend", "fbx", "obj", "ply", "splat", "sog", "spz", "ksplat", "json", "txt", "md"] },
         { name: "All files", extensions: ["*"] },
       ],
     });
@@ -370,11 +469,12 @@ function registerIpc() {
       const error = await shell.openPath(absolute);
       if (error) throw new Error(error);
     } else if (payload.action === "blender") {
-      const blender = detectExternalTools(runtimeState.root).blender;
+      const blender = externalTools(true).blender;
       if (!blender) throw new Error("Blender was not detected");
       spawn(blender, [absolute], { detached: true, windowsHide: true, stdio: "ignore" }).unref();
     } else if (payload.action === "godot") {
-      const godot = detectExternalTools(runtimeState.root).godot;
+      await godotPrimePromise;
+      const godot = externalTools(true).godot;
       if (!godot) throw new Error("Godot was not detected");
       const reviewRoot = resolveContained(runtimeState.godot, "imports");
       const destinationRoot = resolveContained(reviewRoot, payload.runId);
@@ -392,7 +492,10 @@ function registerIpc() {
     sendState();
     return { ...result, skill: currentSkill };
   });
-  handle("forge3d:refresh-tools", async () => currentState());
+  handle("forge3d:refresh-tools", async (payload = {}) => {
+    if (payload.force) externalTools(true);
+    return currentState();
+  });
 }
 
 app.whenReady().then(async () => {
@@ -418,12 +521,20 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler(() => false);
   registerIpc();
   createWindow();
+  const godot = externalTools(true).godot;
+  if (godot) {
+    godotPrimePromise = primeGodotProject(runtimeState, godot);
+    godotPrimePromise.catch((error) => send("forge3d:error", `Godot project setup failed: ${error.message}`));
+  }
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on("before-quit", () => codexClient?.close());
+app.on("before-quit", () => {
+  try { flushRunEvents(); } catch {}
+  codexClient?.close();
+});
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });

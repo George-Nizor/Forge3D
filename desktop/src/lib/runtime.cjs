@@ -3,7 +3,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { atomicWriteJson } = require("./run-store.cjs");
 const { resolveContained } = require("./path-policy.cjs");
 
@@ -15,12 +15,9 @@ function firstWhere(command) {
   return result.stdout.split(/\r?\n/).map((item) => item.trim()).find(Boolean) || null;
 }
 
-function findCodexExecutable() {
-  if (process.env.FORGE3D_CODEX_EXE && fs.existsSync(process.env.FORGE3D_CODEX_EXE)) return path.resolve(process.env.FORGE3D_CODEX_EXE);
-  const fromPath = firstWhere("codex.exe") || firstWhere("codex");
-  if (fromPath) return fromPath;
+function localCodexExecutable() {
   const root = path.join(process.env.LOCALAPPDATA || "", "OpenAI", "Codex", "bin");
-  if (!fs.existsSync(root)) throw new Error("Codex CLI was not found. Install or repair the Codex app, then retry.");
+  if (!fs.existsSync(root)) return null;
   const candidates = [];
   const visit = (directory, depth = 0) => {
     if (depth > 6) return;
@@ -32,8 +29,37 @@ function findCodexExecutable() {
   };
   visit(root);
   candidates.sort((left, right) => right.modified - left.modified);
-  if (!candidates.length) throw new Error("Codex CLI was not found under the Codex installation.");
-  return candidates[0].target;
+  return candidates[0]?.target || null;
+}
+
+function localGodotExecutable() {
+  const roots = [
+    path.join(os.homedir(), "Godot Projects"),
+    path.join(process.env.ProgramFiles || "C:\\Program Files", "Godot"),
+  ];
+  const candidates = [];
+  const visit = (directory, depth = 0) => {
+    if (depth > 3 || !fs.existsSync(directory)) return;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(target, depth + 1);
+      else if (entry.isFile() && /^godot.*\.exe$/i.test(entry.name)) {
+        candidates.push({ target, console: /_console\.exe$/i.test(entry.name), modified: fs.statSync(target).mtimeMs });
+      }
+    }
+  };
+  for (const root of roots) visit(root);
+  candidates.sort((left, right) => Number(left.console) - Number(right.console) || right.modified - left.modified);
+  return candidates[0]?.target || null;
+}
+
+function findCodexExecutable() {
+  if (process.env.FORGE3D_CODEX_EXE && fs.existsSync(process.env.FORGE3D_CODEX_EXE)) return path.resolve(process.env.FORGE3D_CODEX_EXE);
+  const local = localCodexExecutable();
+  if (local) return local;
+  const fromPath = firstWhere("codex.exe") || firstWhere("codex");
+  if (fromPath) return fromPath;
+  throw new Error("Codex CLI was not found. Install or repair the Codex app, then retry.");
 }
 
 function ensureRuntimeState(localStateRoot, resourcesPath) {
@@ -50,6 +76,39 @@ function ensureRuntimeState(localStateRoot, resourcesPath) {
   return { root, godot: godotTarget, logs: resolveContained(root, "logs"), cache: resolveContained(root, "cache") };
 }
 
+function primeGodotProject(runtimeState, godotExecutable, { spawnProcess = spawn, timeoutMs = 60000 } = {}) {
+  const project = path.join(runtimeState.godot, "project.godot");
+  const classCache = path.join(runtimeState.godot, ".godot", "global_script_class_cache.cfg");
+  if (!godotExecutable || !fs.existsSync(godotExecutable) || !fs.existsSync(project)) {
+    return Promise.resolve({ ready: false, skipped: true, classCache });
+  }
+  if (fs.existsSync(classCache)) return Promise.resolve({ ready: true, cached: true, classCache });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const child = spawnProcess(godotExecutable, ["--headless", "--editor", "--path", runtimeState.godot, "--import", "--quit"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve({ ready: true, cached: false, classCache });
+    };
+    const timer = setTimeout(() => {
+      child.kill();
+      finish(new Error("Godot project initialization timed out"));
+    }, timeoutMs);
+    child.once("error", finish);
+    child.once("exit", (code) => {
+      if (code !== 0) finish(new Error(`Godot project initialization exited with code ${code}`));
+      else if (!fs.existsSync(classCache)) finish(new Error("Godot did not create its global script class cache"));
+      else finish();
+    });
+  });
+}
+
 function detectExternalTools(localStateRoot) {
   const blenderCandidates = [
     process.env.BLENDER_EXECUTABLE,
@@ -58,7 +117,7 @@ function detectExternalTools(localStateRoot) {
     "C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe",
     "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Blender\\blender.exe",
   ].filter(Boolean);
-  const godotCandidates = [process.env.GODOT_EXECUTABLE, firstWhere("godot.exe"), firstWhere("godot")].filter(Boolean);
+  const godotCandidates = [process.env.GODOT_EXECUTABLE, localGodotExecutable(), firstWhere("godot.exe"), firstWhere("godot")].filter(Boolean);
   const existing = (items) => items.find((item) => fs.existsSync(item)) || null;
   return {
     codex: (() => { try { return findCodexExecutable(); } catch { return null; } })(),
@@ -145,4 +204,4 @@ function repairForgePlugin({ bundledPlugin, runtimeState, codexExecutable = find
   }
 }
 
-module.exports = { BUNDLE_VERSION, detectExternalTools, ensureRuntimeState, findCodexExecutable, inspectForgeSkill, repairForgePlugin };
+module.exports = { BUNDLE_VERSION, detectExternalTools, ensureRuntimeState, findCodexExecutable, inspectForgeSkill, primeGodotProject, repairForgePlugin };

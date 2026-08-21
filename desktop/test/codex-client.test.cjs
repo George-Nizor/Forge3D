@@ -24,6 +24,27 @@ test("matches JSONL responses to requests", async () => {
   assert.equal((await pending).thread.id, "thr-1");
 });
 
+test("thread and turn requests use the current interactive approval policy", async () => {
+  const client = new CodexAppServerClient();
+  const calls = [];
+  client.request = async (method, params) => {
+    calls.push({ method, params });
+    return method === "thread/start"
+      ? { thread: { id: "thr-1" } }
+      : { turn: { id: "turn-1" } };
+  };
+
+  await client.startThread({ cwd: "C:\\runs\\bookshelf", model: "auto" });
+  await client.startTurn({
+    threadId: "thr-1",
+    prompt: "Make a bookshelf",
+    cwd: "C:\\runs\\bookshelf",
+  });
+
+  assert.equal(calls[0].params.approvalPolicy, "on-request");
+  assert.equal(calls[1].params.approvalPolicy, "on-request");
+  assert.doesNotMatch(JSON.stringify(calls), /unlessTrusted/);
+});
 test("surfaces server approval requests and returns a scoped decision", () => {
   const { client, writes } = connectedClient();
   let received = null;
@@ -36,6 +57,50 @@ test("surfaces server approval requests and returns a scoped decision", () => {
   assert.equal(received.id, 91);
   client.decide(91, "decline");
   assert.deepEqual(writes[0], { id: 91, result: { decision: "decline" } });
+});
+
+test("answers MCP tool approval elicitations with the App Server wire schema", () => {
+  const { client, writes } = connectedClient();
+  client.ingestLine(JSON.stringify({
+    id: 92,
+    method: "mcpServer/elicitation/request",
+    params: {
+      threadId: "thr-1",
+      turnId: "turn-1",
+      serverName: "blender",
+      request: {
+        mode: "form",
+        message: "Allow the blender MCP server to run tool get_scene_info?",
+        requestedSchema: {},
+        _meta: { codex_approval_kind: "mcp_tool_call", persist: ["session", "always"] },
+      },
+    },
+  }));
+  client.decide(92, "acceptForSession");
+  assert.deepEqual(writes[0], {
+    id: 92,
+    result: { action: "accept", content: {}, _meta: { persist: "session" } },
+  });
+});
+
+test("declines MCP tool approval elicitations with null content and metadata", () => {
+  const { client, writes } = connectedClient();
+  client.ingestLine(JSON.stringify({ id: 93, method: "mcpServer/elicitation/request", params: {} }));
+  client.decide(93, "decline");
+  assert.deepEqual(writes[0], {
+    id: 93,
+    result: { action: "decline", content: null, _meta: null },
+  });
+});
+
+test("rejects unsupported server requests with a JSON-RPC method error", () => {
+  const { client, writes } = connectedClient();
+  client.ingestLine(JSON.stringify({ id: 94, method: "tool/requestUserInput", params: {} }));
+  client.reject(94);
+  assert.deepEqual(writes[0], {
+    id: 94,
+    error: { code: -32601, message: "Unsupported App Server request" },
+  });
 });
 
 test("turn input invokes Forge3D skill, attaches local images, and disables network by default", async () => {
