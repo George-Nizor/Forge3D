@@ -2,7 +2,7 @@
 
 ## Scope
 
-Forge3D 0.2.1 adds a local Electron rich client around the existing prompt-first toolkit. It is not
+Forge3D 0.2.2 adds a local Electron rich client around the existing prompt-first toolkit. It is not
 a hosted web application, daemon, database, arbitrary file manager, or replacement for Blender,
 Godot, WSL/CUDA, or large model installations. It runs one Codex job at a time and stores each job as
 a self-contained directory under `%USERPROFILE%\Documents\Forge3D\runs`.
@@ -25,18 +25,20 @@ with workspace-write access limited to that directory. Network access is disable
 checks the per-job cloud approval and confirms it. Provider charges, uploads, commands, or file
 changes can still trigger App Server approvals.
 
-## Spatial Canvas and identity
+## UI A workstation and identity
 
-The desktop is composed around one full-bleed result viewport rather than permanent dashboard
-columns. The top command ribbon owns prompting, attachments, advanced routing, and the Forge action.
-Run history and the steps/artifacts/validation/logs inspector are temporary edge drawers. A bottom
-Plan → Build → Check → Output rail keeps workflow state and produced artifacts visible without
-reducing the canvas. External-tool health is summarized as one quiet local-toolchain state.
+The desktop uses the approved UI A three-pane workstation: permanent grouped run history on the
+left, the viewport and docked prompt composer in the center, and a permanent
+steps/artifacts/validation/logs inspector on the right. The application and viewport toolbars are
+icon-led. External-tool health occupies one compact bottom status bar. There are no dashboard cards,
+edge drawers, numbered production rail, marketing subtitle, or instructional heading over the empty
+viewport.
 
-Forge3D's Topology Loop mark transitions from a triangular control cage into a finished curved
-surface. Space Grotesk is bundled for the wordmark and display hierarchy; Segoe UI Variable is used
-for controls and supporting copy to remain consistent with Instrumenta. The canonical usage and
-prohibited cube/anvil/F3 treatments are recorded in [brand-identity.md](brand-identity.md).
+Forge3D's canonical Logo A is the generated copper loop that transitions from an irregular
+triangular topology cage into a finished curved surface. The same processed PNG master supplies the
+Windows icon, renderer wordmark, and Instrumenta artwork. Space Grotesk is bundled for the wordmark;
+Segoe UI Variable is used for controls to remain consistent with Instrumenta. Canonical usage and
+prohibited redraws are recorded in [brand-identity.md](brand-identity.md).
 
 ## Codex App Server lifecycle
 
@@ -61,7 +63,7 @@ and Codex IDs remain browsable and can be continued by resuming the stored threa
 ## Plugin version and repair
 
 `skills/list` is authoritative for discovery. Forge3D reads the discovered plugin manifest and
-compares it with the bundled 0.2.1 plugin. Missing, invalid, or mismatched registrations show a repair
+compares it with the bundled 0.2.2 plugin. Missing, invalid, or mismatched registrations show a repair
 action. Repair is explicit: the current personal plugin directory is moved to a timestamped backup,
 the bundled plugin is copied, machine-specific Blender/Godot MCP configuration is generated, the
 personal marketplace entry is updated, and `codex plugin add forge3d@personal` is invoked. Failure

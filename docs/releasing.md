@@ -8,7 +8,7 @@
 
 The script builds the dependency-light Python CLI into `desktop\runtime\forge3d.exe`, installs the
 locked npm tree, runs desktop tests, compiles the renderer, and packages the Electron application as
-`desktop\dist-package\Forge3D-0.2.1-windows-x64.zip`. It then writes
+`desktop\dist-package\Forge3D-0.2.2-windows-x64.zip`. It then writes
 `instrumenta-release.json` with the exact ZIP byte size, SHA-256, `Forge3D.exe` entry point, managed
 install strategy, and minimum Instrumenta 0.8.0.
 

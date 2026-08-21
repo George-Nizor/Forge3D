@@ -62,7 +62,7 @@ else {
     }
 }
 
-$assetName = "Forge3D-0.2.1-windows-x64.zip"
+$assetName = "Forge3D-0.2.2-windows-x64.zip"
 $asset = Join-Path $packageRoot $assetName
 if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
     throw "Forge3D release archive was not created: $asset"
@@ -71,7 +71,7 @@ $assetInfo = Get-Item -LiteralPath $asset
 $manifest = [ordered]@{
     schemaVersion = 1
     product = "forge3d"
-    version = "0.2.1"
+    version = "0.2.2"
     platform = "windows-x64"
     minimumInstrumentaVersion = "0.8.0"
     installStrategy = "managed-bundle"

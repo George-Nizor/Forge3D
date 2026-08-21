@@ -1,6 +1,7 @@
 import "./style.css";
 import "@fontsource/space-grotesk/500.css";
 import "@fontsource/space-grotesk/600.css";
+import brandMark from "./forge3d-mark.png";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -16,59 +17,121 @@ let approval = null;
 let previewDispose = () => {};
 let refreshTimer = null;
 
+const glyphs = {
+  add: '<path d="M12 5v14M5 12h14"/>',
+  attach: '<path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7L9.7 17.7a2 2 0 0 1-2.8-2.8l8.9-8.9"/>',
+  box: '<path d="m21 8-9-5-9 5 9 5 9-5Z"/><path d="m3 8 9 5 9-5M3 8v8l9 5 9-5V8M12 13v8"/>',
+  camera: '<path d="M14.5 4 16 7h4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4l1.5-3h5Z"/><circle cx="12" cy="13" r="3"/>',
+  checklist: '<path d="m4 6 2 2 3-4M11 6h9M4 13l2 2 3-4M11 13h9M4 20l2 2 3-4M11 20h9"/>',
+  chevron: '<path d="m8 10 4 4 4-4"/>',
+  cube: '<path d="m21 8-9-5-9 5 9 5 9-5Z"/><path d="m3 8 9 5 9-5M3 8v8l9 5 9-5V8M12 13v8"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/>',
+  filter: '<path d="M4 5h16l-6 7v5l-4 2v-7Z"/>',
+  fit: '<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>',
+  folder: '<path d="M3 6h7l2 2h9v11H3Z"/>',
+  fullscreen: '<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>',
+  grid: '<path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+  logs: '<path d="M4 4h16v16H4zM8 9l3 3-3 3M13 15h3"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  move: '<path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M22 12l-3-3M22 12l-3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3"/>',
+  nodes: '<circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="19" r="2"/><path d="M7 7.2 10.8 17M17 7.2 13.2 17M7 6h10"/>',
+  orbit: '<circle cx="12" cy="12" r="3"/><path d="M3.5 12c0-4.7 3.8-8.5 8.5-8.5 2.2 0 4.2.8 5.7 2.2M20.5 12c0 4.7-3.8 8.5-8.5 8.5-2.2 0-4.2-.8-5.7-2.2M17 2v4h4M7 22v-4H3"/>',
+  play: '<path d="m8 5 11 7-11 7Z"/>',
+  pointer: '<path d="m5 3 13 9-6 2-3 6Z"/>',
+  rotate: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  save: '<path d="M4 3h14l2 2v16H4Z"/><path d="M8 3v6h8V3M8 21v-8h8v8"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/>',
+  sliders: '<path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3"/><circle cx="13" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="18" r="2"/>',
+  stop: '<rect x="6" y="6" width="12" height="12"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/>',
+};
+function glyph(name, className = "") {
+  return `<svg class="ui-icon ${className}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${glyphs[name]}</svg>`;
+}
+
 app.innerHTML = `
-  <header class="command-ribbon">
-    <div class="brand" aria-label="Forge3D">
-      <svg class="brand-symbol" viewBox="0 0 512 512" aria-hidden="true">
-        <defs><linearGradient id="brand-copper" x1=".15" y1=".12" x2=".88" y2=".86"><stop stop-color="#ffd19c"/><stop offset=".42" stop-color="#e8893e"/><stop offset="1" stop-color="#8f371d"/></linearGradient></defs>
-        <path d="M132 344C205 425 354 389 412 287c46-80-15-166-102-176-65-8-122 18-160 66l54 37c27-30 65-43 103-33 52 14 72 64 42 104-36 48-114 61-171 21Z" fill="url(#brand-copper)"/>
-        <path d="M204 214c27-30 65-43 103-33 31 8 51 29 56 54-33-28-83-34-122-12-19 11-33 27-42 45l-47-20c10-13 28-27 52-34Z" fill="#ffe0b5" opacity=".28"/>
-        <g fill="none" stroke="#ee9a55" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"><path d="m132 344-44-44-9-60 20-44 51-19"/><path d="m178 306-27-40 15-37 38-15"/><path d="m88 300 63-34m-72-26 87-11m-67-33 52 70m-52-70 105 18"/></g>
-        <g fill="#ffd29f"><circle cx="132" cy="344" r="9"/><circle cx="88" cy="300" r="9"/><circle cx="79" cy="240" r="9"/><circle cx="99" cy="196" r="9"/><circle cx="150" cy="177" r="9"/><circle cx="151" cy="266" r="8"/><circle cx="166" cy="229" r="8"/><circle cx="204" cy="214" r="9"/></g>
-      </svg>
-      <strong>Forge3D</strong>
-    </div>
-    <div class="prompt-command">
-      <div id="attachments" class="attachment-row"></div>
-      <textarea id="prompt" rows="1" aria-label="Forge3D prompt" placeholder="Describe the object, scene, animation, or edit you want…"></textarea>
-      <div class="prompt-actions">
-        <button id="attach" class="command-button" title="Attach source files" aria-label="Attach source files">＋ <span>Attach</span></button>
-        <details id="advanced">
-          <summary class="command-button">Controls</summary>
-          <div class="advanced-grid">
-            <label>Workflow<select id="workflow"><option value="auto">Auto route</option><option value="authored-blender">Authored Blender</option><option value="image-to-mesh">Image to mesh</option><option value="gaussian-splat">Gaussian splat</option><option value="process">Process existing</option><option value="rig">Rig</option><option value="animate">Animate</option><option value="retarget">Retarget</option><option value="validate">Validate</option></select></label>
-            <label>Quality<select id="quality"><option value="balanced">Balanced</option><option value="draft">Draft</option><option value="production">Production</option></select></label>
-            <label>Target<select id="target"><option value="glb">GLB</option><option value="blend">BLEND</option><option value="splat">SPLAT/PLY</option><option value="gif">GIF / sequence</option></select></label>
-            <label>Tool / model<select id="tool"><option value="auto">Auto</option><option value="blender">Blender</option><option value="triposplat">TripoSplat</option><option value="spar3d">SPAR3D</option><option value="tripo-cloud">Tripo cloud</option></select></label>
-            <label>Codex model<select id="model"><option value="auto">Codex default</option></select></label>
-            <label>Reasoning<select id="effort"><option value="auto">Model default</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select></label>
-            <label class="cloud-consent"><input id="cloud-approved" type="checkbox" /> Allow cloud execution or file upload for this job only</label>
-          </div>
-        </details>
-        <button id="cancel" class="danger hidden">Cancel</button>
-        <button id="send" class="primary">Forge <span>↗</span></button>
-      </div>
-    </div>
-    <div class="ribbon-status">
-      <div id="dependency-strip" class="toolchain-state">Checking local toolchain…</div>
-      <div id="agent-state" class="agent-state"></div>
-    </div>
+  <header class="app-bar">
+    <div class="brand" aria-label="Forge3D"><img src="${brandMark}" alt="" /><strong>Forge3D</strong></div>
+    <nav class="global-tools" aria-label="Application actions">
+      <button id="toolbar-new" class="tool-button" title="New run" aria-label="New run">${glyph("file")}</button>
+      <button id="toolbar-reveal" class="tool-button" title="Reveal selected output" aria-label="Reveal selected output">${glyph("folder")}</button>
+      <button class="tool-button" title="Runs save automatically" aria-label="Runs save automatically" disabled>${glyph("save")}</button>
+      <span class="tool-separator"></span>
+      <button id="toolbar-start" class="tool-button" title="Run prompt" aria-label="Run prompt">${glyph("play")}</button>
+      <button id="toolbar-stop" class="tool-button" title="Stop active run" aria-label="Stop active run">${glyph("stop")}</button>
+      <button id="toolbar-trash" class="tool-button" title="Move selected run to trash" aria-label="Move selected run to trash">${glyph("trash")}</button>
+      <span class="tool-separator"></span>
+      <button id="toolbar-steps" class="tool-button" title="Show workflow steps" aria-label="Show workflow steps">${glyph("nodes")}</button>
+      <button id="toolbar-logs" class="tool-button" title="Show Codex logs" aria-label="Show Codex logs">${glyph("logs")}</button>
+    </nav>
+    <div class="app-bar-spacer"></div>
+    <div id="agent-state" class="agent-state"></div>
+    <button id="toolbar-settings" class="tool-button" title="Run settings" aria-label="Run settings">${glyph("settings")}</button>
   </header>
-  <main class="spatial-workspace">
-    <section class="stage">
-      <div id="run-heading" class="run-heading"></div>
-      <div id="preview" class="preview"></div>
-      <div id="artifact-toolbar" class="artifact-toolbar"></div>
-    </section>
-    <button id="runs-toggle" class="edge-tab runs-tab" aria-expanded="false" aria-controls="library"><span>Runs</span></button>
-    <aside id="library" class="drawer library" aria-hidden="true">
-      <div class="drawer-heading"><div><small>RUN LIBRARY</small><h2>History</h2></div><div class="drawer-actions"><button id="new-run" class="icon-button" title="New run">＋</button><button class="icon-button drawer-close" data-close-drawer="library" aria-label="Close run history">×</button></div></div>
-      <input id="run-search" class="search" type="search" placeholder="Search prompts, routes, status" />
+
+  <main class="workbench">
+    <aside id="library" class="pane library" aria-hidden="false">
+      <header class="pane-title"><strong>RUNS</strong><span><button class="bare-icon" title="Filter runs" aria-label="Filter runs">${glyph("filter")}</button><button class="bare-icon" title="Run list options" aria-label="Run list options">${glyph("list")}</button></span></header>
+      <button id="new-run" class="new-run">${glyph("add")}<span>New Run</span></button>
+      <label class="run-search-wrap">${glyph("search")}<input id="run-search" class="search" type="search" placeholder="Search runs" /></label>
       <div id="run-list" class="run-list"></div>
     </aside>
-    <button id="inspector-toggle" class="edge-tab details-tab" aria-expanded="false" aria-controls="inspector"><span>Details</span></button>
-    <aside id="inspector" class="drawer inspector" aria-hidden="true">
-      <div class="drawer-heading compact"><div><small>RUN DETAILS</small><h2>Inspector</h2></div><button class="icon-button drawer-close" data-close-drawer="inspector" aria-label="Close inspector">×</button></div>
+
+    <section class="viewport-column">
+      <header class="viewport-title"><strong>VIEWPORT</strong></header>
+      <nav class="viewport-tools" aria-label="Viewport tools">
+        <div class="viewport-tool-group">
+          <button class="viewport-button active" title="Select" aria-label="Select">${glyph("pointer")}</button>
+          <button class="viewport-button" title="Move" aria-label="Move">${glyph("move")}</button>
+          <button class="viewport-button" title="Orbit" aria-label="Orbit">${glyph("orbit")}</button>
+          <button class="viewport-button" title="Frame selected" aria-label="Frame selected">${glyph("fit")}</button>
+          <button class="viewport-button" title="Toggle grid" aria-label="Toggle grid">${glyph("grid")}</button>
+        </div>
+        <span class="viewport-separator"></span>
+        <div class="viewport-tool-group">
+          <button class="viewport-button" title="Material preview" aria-label="Material preview"><i class="shade-dot matte"></i></button>
+          <button class="viewport-button active" title="Rendered preview" aria-label="Rendered preview"><i class="shade-dot rendered"></i></button>
+          <button class="viewport-button" title="Wireframe" aria-label="Wireframe">${glyph("cube")}</button>
+        </div>
+        <div class="viewport-tool-spacer"></div>
+        <div class="viewport-tool-group">
+          <button class="viewport-button" title="Capture viewport" aria-label="Capture viewport">${glyph("camera")}</button>
+          <button id="viewport-fullscreen" class="viewport-button" title="Fullscreen viewport" aria-label="Fullscreen viewport">${glyph("fullscreen")}</button>
+          <button class="viewport-button" title="Viewport settings" aria-label="Viewport settings">${glyph("settings")}</button>
+        </div>
+      </nav>
+      <div class="viewport-stage">
+        <div id="run-heading" class="run-heading"></div>
+        <div id="preview" class="preview"></div>
+        <div id="artifact-toolbar" class="artifact-toolbar"></div>
+      </div>
+      <section class="composer">
+        <div id="attachments" class="attachment-row"></div>
+        <div class="composer-row">
+          <button id="attach" class="composer-icon" title="Attach source files" aria-label="Attach source files">${glyph("attach")}</button>
+          <details id="advanced">
+            <summary class="composer-icon" title="Advanced controls" aria-label="Advanced controls">${glyph("sliders")}</summary>
+            <div class="advanced-grid">
+              <label>Workflow<select id="workflow"><option value="auto">Auto route</option><option value="authored-blender">Authored Blender</option><option value="image-to-mesh">Image to mesh</option><option value="gaussian-splat">Gaussian splat</option><option value="process">Process existing</option><option value="rig">Rig</option><option value="animate">Animate</option><option value="retarget">Retarget</option><option value="validate">Validate</option></select></label>
+              <label>Quality<select id="quality"><option value="balanced">Balanced</option><option value="draft">Draft</option><option value="production">Production</option></select></label>
+              <label>Target<select id="target"><option value="glb">GLB</option><option value="blend">BLEND</option><option value="splat">SPLAT/PLY</option><option value="gif">GIF / sequence</option></select></label>
+              <label>Tool / model<select id="tool"><option value="auto">Auto</option><option value="blender">Blender</option><option value="triposplat">TripoSplat</option><option value="spar3d">SPAR3D</option><option value="tripo-cloud">Tripo cloud</option></select></label>
+              <label>Codex model<select id="model"><option value="auto">Codex default</option></select></label>
+              <label>Reasoning<select id="effort"><option value="auto">Model default</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select></label>
+              <label class="cloud-consent"><input id="cloud-approved" type="checkbox" /> Allow cloud execution or file upload for this job only</label>
+            </div>
+          </details>
+          <textarea id="prompt" rows="2" aria-label="Forge3D prompt" placeholder="Describe what you want to create or change…"></textarea>
+          <button id="cancel" class="run-cancel hidden" title="Cancel run" aria-label="Cancel run">${glyph("stop")}</button>
+          <button id="send" class="run-button">${glyph("play")}<span>Run</span></button>
+          <button class="run-menu" title="Run options" aria-label="Run options">${glyph("chevron")}</button>
+        </div>
+      </section>
+    </section>
+
+    <aside id="inspector" class="pane inspector" aria-hidden="false">
       <div class="tabs" role="tablist">
         <button class="tab active" data-tab="steps">Steps</button>
         <button class="tab" data-tab="artifacts">Artifacts</button>
@@ -78,18 +141,20 @@ app.innerHTML = `
       <div id="inspector-content" class="inspector-content"></div>
     </aside>
   </main>
-  <section class="production-rail">
-    <div class="rail-heading"><span>PRODUCTION</span><small id="rail-context">Waiting for a brief</small></div>
-    <div id="production-track" class="production-track"></div>
-    <div class="artifact-shelf">
-      <span class="shelf-label">OUTPUTS</span>
-      <div id="artifact-strip" class="artifact-strip"></div>
-    </div>
-  </section>
+
+  <footer class="status-bar">
+    <div id="dependency-strip" class="dependency-strip"></div>
+    <div class="status-spacer"></div>
+    <time id="status-time"></time>
+    <button class="bare-icon status-message" title="Messages" aria-label="Messages">${glyph("logs")}</button>
+  </footer>
+
+  <button id="runs-toggle" class="hidden" aria-controls="library"></button>
+  <button id="inspector-toggle" class="hidden" aria-controls="inspector"></button>
+  <div id="production-track" hidden></div><div id="artifact-strip" hidden></div><span id="rail-context" hidden></span>
   <div id="approval-layer"></div>
   <div id="toast-layer" aria-live="polite"></div>
 `;
-
 const elements = Object.fromEntries([
   "dependency-strip", "agent-state", "run-list", "run-search", "run-heading", "preview", "artifact-toolbar",
   "inspector-content", "attachments", "prompt", "workflow", "quality", "target", "tool", "model", "effort",
@@ -135,14 +200,10 @@ function selectedArtifact(run = selectedRun()) {
     || null;
 }
 
-function emptyPreview(title, detail) {
-  return `<div class="empty-state">
-    <svg class="empty-mark" viewBox="0 0 512 512" aria-hidden="true">
-      <path d="M132 344C205 425 354 389 412 287c46-80-15-166-102-176-65-8-122 18-160 66l54 37c27-30 65-43 103-33 52 14 72 64 42 104-36 48-114 61-171 21Z"/>
-      <g fill="none"><path d="m132 344-44-44-9-60 20-44 51-19"/><path d="m178 306-27-40 15-37 38-15"/><path d="m88 300 63-34m-72-26 87-11m-67-33 52 70m-52-70 105 18"/></g>
-    </svg>
-    <h2>${escapeHtml(title)}</h2>
-    <p>${escapeHtml(detail)}</p>
+function emptyPreview() {
+  return `<div class="viewport-empty" aria-label="Empty 3D viewport">
+    <span class="viewport-cross"></span>
+    <span class="axis-widget"><i class="axis-y">Y</i><i class="axis-x">X</i><i class="axis-z">Z</i></span>
   </div>`;
 }
 
@@ -169,19 +230,12 @@ function renderDependencies() {
   const missing = known.filter(([, value]) => !value).map(([name]) => name);
   const checking = known.length < tools.length;
   const failed = Boolean(state.appServerError);
-  const label = failed ? "LOCAL AGENT OFFLINE" : missing.length ? "LOCAL TOOLCHAIN NEEDS ATTENTION" : checking ? "CHECKING LOCAL TOOLCHAIN" : "LOCAL TOOLCHAIN READY";
-  const tone = failed ? "failed" : missing.length ? "warning" : checking ? "checking" : "ready";
-  elements.dependencyStrip.className = `toolchain-state ${tone}`;
-  elements.dependencyStrip.innerHTML = `<i></i><span>${escapeHtml(label)}</span>`;
-  elements.dependencyStrip.title = missing.length ? `Unavailable: ${missing.join(", ")}` : label;
-
+  const overall = failed ? "offline" : missing.length ? "attention" : checking ? "checking" : "ready";
+  const overallLabel = failed ? "Toolchain offline" : missing.length ? "Toolchain attention" : checking ? "Checking toolchain" : "Toolchain ready";
+  elements.dependencyStrip.innerHTML = `<span class="status-item ${overall}"><i></i>${overallLabel}</span><span class="status-divider"></span>${tools.map(([name, value]) => `<span class="status-item ${value ? "ready" : value === undefined ? "checking" : "offline"}"><i></i>${name}${name === "Blender" && value ? " 4.5" : name === "Godot" && value ? " 4.4" : ""}</span>`).join("")}`;
   const skill = state.skill;
   const needsRepair = skill && skill.state !== "ready";
-  const message = failed
-    ? state.appServerError
-    : needsRepair
-      ? (skill.state === "version-mismatch" ? `Plugin ${skill.installedVersion} → ${skill.bundledVersion}` : "Plugin repair available")
-      : "";
+  const message = failed ? state.appServerError : needsRepair ? (skill.state === "version-mismatch" ? `Plugin ${skill.installedVersion} → ${skill.bundledVersion}` : "Plugin repair available") : "";
   elements.agentState.classList.toggle("hidden", !message);
   elements.agentState.innerHTML = message ? `${escapeHtml(message)}${needsRepair ? ' <button id="repair-skill" class="link-button">Repair</button>' : ""}` : "";
   document.querySelector("#repair-skill")?.addEventListener("click", repairPlugin);
@@ -196,31 +250,22 @@ function renderModelOptions() {
 function renderRuns() {
   const query = elements.runSearch.value.trim().toLowerCase();
   const runs = state.runs.filter((run) => [run.prompt, run.workflow_route, run.status, run.name].some((value) => String(value || "").toLowerCase().includes(query)));
-  elements.runList.innerHTML = runs.length ? runs.map((run) => `
-    <button class="run-card ${run.run_id === selectedRunId ? "selected" : ""}" data-run-id="${run.run_id}">
-      <span class="run-card-top"><strong>${escapeHtml(run.prompt || run.name)}</strong><i class="run-status ${escapeHtml(run.status)}"></i></span>
-      <span class="run-meta"><em>${escapeHtml(run.workflow_route || run.command)}</em><span>${escapeHtml(statusLabel(run.status))}</span></span>
-      <small>${escapeHtml(formatDate(run.updated_at || run.created_at))}${run.archived ? " · archived" : ""}</small>
-    </button>`).join("") : '<div class="empty-list">No matching runs</div>';
+  const groups = new Map();
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  for (const run of runs) {
+    const date = new Date(run.updated_at || run.created_at || Date.now());
+    const sameDay = (left, right) => left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+    const label = sameDay(date, today) ? "Today" : sameDay(date, yesterday) ? "Yesterday" : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" }).format(date);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push({ run, date });
+  }
+  elements.runList.innerHTML = groups.size ? [...groups.entries()].map(([label, entries]) => `<section class="run-group"><h3>${escapeHtml(label)}</h3>${entries.map(({ run, date }) => `<button class="run-card ${run.run_id === selectedRunId ? "selected" : ""}" data-run-id="${run.run_id}"><span class="run-glyph">${glyph("cube")}</span><strong>${escapeHtml(run.prompt || run.name)}</strong><time>${escapeHtml(new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date))}</time></button>`).join("")}</section>`).join("") : '<div class="empty-list">No runs</div>';
   elements.runList.querySelectorAll("[data-run-id]").forEach((button) => button.addEventListener("click", () => selectRun(button.dataset.runId)));
 }
 
 function renderRunHeading() {
-  const run = selectedRun();
-  if (!run) {
-    elements.runHeading.innerHTML = '<div class="stage-context"><small>SPATIAL CANVAS</small><h1>Ready for a new asset</h1></div>';
-    return;
-  }
-  const canContinue = !run.archived && !["running", "launching", "cancelling"].includes(run.status) && !state.activeJob;
-  elements.runHeading.innerHTML = `
-    <div class="stage-context"><small>${escapeHtml(run.workflow_route || run.command)} · ${escapeHtml(statusLabel(run.status))}</small><h1>${escapeHtml(run.prompt || run.name)}</h1></div>
-    <div class="run-actions">
-      ${canContinue ? '<button data-run-action="continue" class="secondary">Continue</button>' : ""}
-      <button data-run-action="duplicate" class="secondary">Duplicate</button>
-      ${run.archived ? "" : '<button data-run-action="archive" class="secondary">Archive</button>'}
-      <button data-run-action="trash" class="ghost danger-text">Trash</button>
-    </div>`;
-  elements.runHeading.querySelectorAll("[data-run-action]").forEach((button) => button.addEventListener("click", () => runAction(button.dataset.runAction)));
+  elements.runHeading.innerHTML = "";
 }
 
 function renderArtifactToolbar() {
@@ -257,7 +302,7 @@ function disposeThree(scene, renderer, animationId, observer) {
 
 function threeBase(container, withSpark = false) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x11100f);
+  scene.background = new THREE.Color(0x0b1118);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
   camera.position.set(2.5, 1.8, 3.2);
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -268,10 +313,10 @@ function threeBase(container, withSpark = false) {
   container.append(renderer.domElement);
   if (withSpark) scene.add(new SparkRenderer({ renderer }));
   else {
-    scene.add(new THREE.HemisphereLight(0xf2ddc7, 0x241710, 2.2));
-    const key = new THREE.DirectionalLight(0xffc38c, 3.4);
+    scene.add(new THREE.HemisphereLight(0xd7e1ea, 0x081018, 2.2));
+    const key = new THREE.DirectionalLight(0xffa35c, 3.4);
     key.position.set(3, 6, 4);
-    scene.add(key, new THREE.GridHelper(12, 24, 0x5a3c2b, 0x241d19));
+    scene.add(key, new THREE.GridHelper(12, 24, 0x28404f, 0x15232e));
   }
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -370,7 +415,7 @@ async function renderPreview() {
   const run = selectedRun();
   const artifact = selectedArtifact(run);
   if (!run || !artifact) {
-    elements.preview.innerHTML = emptyPreview("Shape the next thing", "Write a prompt above or choose an output from a previous run.");
+    elements.preview.innerHTML = emptyPreview();
     return;
   }
   selectedArtifactPath = artifact.path;
@@ -421,11 +466,11 @@ function renderInspector() {
   const run = selectedRun();
   const tab = activeTab();
   if (!run) {
-    elements.inspectorContent.innerHTML = '<div class="empty-list">Select a run to inspect its work.</div>';
+    elements.inspectorContent.innerHTML = `<div class="inspector-empty">${glyph("checklist")}<span>Select a run to inspect its steps.</span></div>`;
     return;
   }
   if (tab === "steps") {
-    elements.inspectorContent.innerHTML = run.steps?.length ? `<ol class="step-list">${run.steps.map((step) => `<li><i class="step-state ${escapeHtml(step.status)}"></i><div><strong>${escapeHtml(step.name)}</strong><small>${escapeHtml(statusLabel(step.status))}</small></div></li>`).join("")}</ol>` : '<div class="empty-list">Workflow steps will stream here.</div>';
+    elements.inspectorContent.innerHTML = run.steps?.length ? `<ol class="step-list">${run.steps.map((step) => `<li><i class="step-state ${escapeHtml(step.status)}"></i><div><strong>${escapeHtml(step.name)}</strong><small>${escapeHtml(statusLabel(step.status))}</small></div></li>`).join("")}</ol>` : `<div class="inspector-empty">${glyph("nodes")}<span>Steps appear when the run starts.</span></div>`;
   } else if (tab === "artifacts") {
     elements.inspectorContent.innerHTML = run.artifacts?.length ? `<div class="artifact-list">${run.artifacts.map((artifact) => `<button class="artifact-card ${artifact.path === selectedArtifactPath ? "selected" : ""}" data-artifact-path="${escapeHtml(artifact.path)}"><span class="artifact-icon">${artifact.preview_role === "model" ? "3D" : artifact.preview_role === "gaussian-splat" ? "✦" : artifact.preview_role.includes("image") || artifact.preview_role === "animation" ? "▧" : "≡"}</span><span><strong>${escapeHtml(artifact.name)}</strong><small>${escapeHtml(artifact.preview_role)} · ${escapeHtml(formatBytes(artifact.size_bytes))}</small></span></button>`).join("")}</div>` : '<div class="empty-list">Artifacts are discovered inside this run only.</div>';
     elements.inspectorContent.querySelectorAll("[data-artifact-path]").forEach((button) => button.addEventListener("click", () => { selectedArtifactPath = button.dataset.artifactPath; renderInspector(); renderProductionRail(); renderPreview(); }));
@@ -450,35 +495,7 @@ function artifactGlyph(artifact) {
 }
 
 function renderProductionRail() {
-  const run = selectedRun();
-  const artifacts = run?.artifacts || [];
-  const validation = run?.validation && Object.keys(run.validation).length;
-  const complete = run?.status === "completed";
-  const activeIndex = !run ? 0 : complete ? 3 : validation ? 3 : artifacts.length ? 2 : 1;
-  const stages = [
-    ["PLAN", run ? (run.workflow_route || run.command || "Auto route") : "Waiting for a brief"],
-    ["BUILD", run ? (run.steps?.length ? `${run.steps.length} workflow steps` : statusLabel(run.status)) : "Tool route follows the prompt"],
-    ["CHECK", validation ? "Validation available" : run ? "Validation pending" : "Geometry and target checks"],
-    ["OUTPUT", artifacts.length ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"}` : "No output yet"],
-  ];
-  elements.railContext.textContent = run ? statusLabel(run.status) : "Waiting for a brief";
-  elements.productionTrack.innerHTML = stages.map(([label, note], index) => {
-    const stageState = complete || index < activeIndex ? "complete" : index === activeIndex ? (run?.status === "failed" ? "failed" : "active") : "pending";
-    return `<div class="production-node ${stageState}"><i><span>${String(index + 1).padStart(2, "0")}</span></i><div><strong>${label}</strong><small>${escapeHtml(note)}</small></div></div>`;
-  }).join("");
-  elements.artifactStrip.innerHTML = artifacts.length ? artifacts.map((artifact) => {
-    const imageRole = ["primary-image", "image", "animation"].includes(artifact.preview_role);
-    const visual = imageRole
-      ? `<img src="${artifactUrl(run.run_id, artifact.path)}" alt="" loading="lazy" />`
-      : `<span class="artifact-glyph">${artifactGlyph(artifact)}</span>`;
-    return `<button class="rail-artifact ${artifact.path === selectedArtifact(run)?.path ? "selected" : ""}" data-rail-artifact="${escapeHtml(artifact.path)}" title="${escapeHtml(artifact.name)}">${visual}<span>${escapeHtml(artifact.name)}</span></button>`;
-  }).join("") : '<div class="empty-shelf">Artifacts arrive here as the run works.</div>';
-  elements.artifactStrip.querySelectorAll("[data-rail-artifact]").forEach((button) => button.addEventListener("click", () => {
-    selectedArtifactPath = button.dataset.railArtifact;
-    renderProductionRail();
-    renderInspector();
-    renderPreview();
-  }));
+  // UI A routes artifacts through the inspector and viewport toolbar only.
 }
 
 function renderAttachments() {
@@ -488,7 +505,7 @@ function renderAttachments() {
 
 function renderComposer() {
   const active = state.activeJob;
-  elements.send.innerHTML = active ? 'Steer <span>↗</span>' : 'Forge <span>↗</span>';
+  elements.send.innerHTML = active ? `${glyph("nodes")}<span>Steer</span>` : `${glyph("play")}<span>Run</span>`;
   elements.cancel.classList.toggle("hidden", !active);
   elements.cloudApproved.disabled = Boolean(active);
 }
@@ -642,16 +659,53 @@ async function artifactAction(action) {
   } catch (error) { toast(error.message, "error"); }
 }
 
-function setDrawer(name, open) {
-  const drawer = document.querySelector(`#${name}`);
-  const toggle = document.querySelector(name === "library" ? "#runs-toggle" : "#inspector-toggle");
-  if (open) setDrawer(name === "library" ? "inspector" : "library", false);
-  drawer.classList.toggle("open", open);
-  drawer.setAttribute("aria-hidden", String(!open));
-  toggle.classList.toggle("open", open);
-  toggle.setAttribute("aria-expanded", String(open));
+function setDrawer() {
+  document.querySelector("#library")?.setAttribute("aria-hidden", "false");
+  document.querySelector("#inspector")?.setAttribute("aria-hidden", "false");
 }
 
+function activateInspectorTab(name) {
+  const target = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (!target) return;
+  document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === target));
+  renderInspector();
+}
+
+function resetForNewRun() {
+  selectedRunId = null;
+  selectedArtifactPath = null;
+  elements.prompt.focus();
+  renderRuns();
+  renderRunHeading();
+  renderInspector();
+  renderProductionRail();
+  renderPreview();
+}
+
+document.querySelector("#toolbar-new").addEventListener("click", resetForNewRun);
+document.querySelector("#toolbar-reveal").addEventListener("click", () => selectedArtifact() ? artifactAction("reveal") : toast("Select an output first"));
+document.querySelector("#toolbar-start").addEventListener("click", startOrSteer);
+document.querySelector("#toolbar-stop").addEventListener("click", cancelActive);
+document.querySelector("#toolbar-trash").addEventListener("click", () => selectedRun() ? runAction("trash") : toast("Select a run first"));
+document.querySelector("#toolbar-steps").addEventListener("click", () => activateInspectorTab("steps"));
+document.querySelector("#toolbar-logs").addEventListener("click", () => activateInspectorTab("logs"));
+document.querySelector("#toolbar-settings").addEventListener("click", () => document.querySelector("#advanced").toggleAttribute("open"));
+document.querySelector("#viewport-fullscreen").addEventListener("click", async () => {
+  try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.querySelector(".viewport-stage").requestFullscreen(); }
+  catch (error) { toast(error.message, "error"); }
+});
+document.querySelectorAll(".viewport-button").forEach((button) => button.addEventListener("click", () => {
+  if (button.id === "viewport-fullscreen") return;
+  const group = button.closest(".viewport-tool-group");
+  group?.querySelectorAll(".viewport-button").forEach((item) => item.classList.toggle("active", item === button));
+}));
+
+function updateStatusTime() {
+  const target = document.querySelector("#status-time");
+  if (target) target.textContent = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date());
+}
+updateStatusTime();
+setInterval(updateStatusTime, 30000);
 document.querySelector("#attach").addEventListener("click", async () => {
   try {
     const picked = await api.pickAttachments();
@@ -659,17 +713,8 @@ document.querySelector("#attach").addEventListener("click", async () => {
     renderAttachments();
   } catch (error) { toast(error.message, "error"); }
 });
-document.querySelector("#new-run").addEventListener("click", () => {
-  selectedRunId = null;
-  selectedArtifactPath = null;
-  setDrawer("library", false);
-  elements.prompt.focus();
-  renderRuns();
-  renderRunHeading();
-  renderInspector();
-  renderProductionRail();
-  renderPreview();
-});
+document.querySelector("#new-run").addEventListener("click", resetForNewRun);
+
 document.querySelector("#runs-toggle").addEventListener("click", () => setDrawer("library", !document.querySelector("#library").classList.contains("open")));
 document.querySelector("#inspector-toggle").addEventListener("click", () => setDrawer("inspector", !document.querySelector("#inspector").classList.contains("open")));
 document.querySelectorAll("[data-close-drawer]").forEach((button) => button.addEventListener("click", () => setDrawer(button.dataset.closeDrawer, false)));

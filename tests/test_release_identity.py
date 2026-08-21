@@ -8,7 +8,7 @@ from forge3d import __version__
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_VERSION = "0.2.1"
+RELEASE_VERSION = "0.2.2"
 
 
 def test_release_identity_is_consistent() -> None:
@@ -21,4 +21,4 @@ def test_release_identity_is_consistent() -> None:
     assert (ROOT / "desktop" / "assets" / "icon.svg").is_file()
     assert (ROOT / "desktop" / "assets" / "icon.png").is_file()
     blender_source = (ROOT / "blender" / "forge3d_task.py").read_text(encoding="utf-8")
-    assert re.search(r'^TOOL_VERSION = "0\.2\.1"$', blender_source, re.MULTILINE)
+    assert re.search(r'^TOOL_VERSION = "0\.2\.2"$', blender_source, re.MULTILINE)

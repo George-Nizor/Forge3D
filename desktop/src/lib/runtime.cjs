@@ -7,7 +7,7 @@ const { spawnSync } = require("node:child_process");
 const { atomicWriteJson } = require("./run-store.cjs");
 const { resolveContained } = require("./path-policy.cjs");
 
-const BUNDLE_VERSION = "0.2.1";
+const BUNDLE_VERSION = "0.2.2";
 
 function firstWhere(command) {
   const result = spawnSync("where.exe", [command], { windowsHide: true, encoding: "utf8" });

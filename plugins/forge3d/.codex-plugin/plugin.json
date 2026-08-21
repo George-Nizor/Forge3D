@@ -1,6 +1,6 @@
 {
   "name": "forge3d",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Prompt-first local workflows for creating game-ready 3D assets with Blender and Godot.",
   "author": {
     "name": "George Nizor"

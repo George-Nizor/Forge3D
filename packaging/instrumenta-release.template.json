@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "product": "forge3d",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "platform": "windows-x64",
   "minimumInstrumentaVersion": "0.8.0",
   "installStrategy": "managed-bundle",
   "bundle": {
-    "asset": "Forge3D-0.2.1-windows-x64.zip",
+    "asset": "Forge3D-0.2.2-windows-x64.zip",
     "size": 0,
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "entry": "Forge3D.exe"
