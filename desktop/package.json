@@ -1,11 +1,11 @@
 {
   "name": "forge3d-desktop",
   "productName": "Forge3D",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "author": "George Nizor",
   "license": "MIT",
-  "description": "Prompt-first Forge3D desktop client for Codex, Blender, and Godot",
+  "description": "Local spatial creation and review application",
   "main": "src/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -16,6 +16,7 @@
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@fontsource/space-grotesk": "5.3.0",
     "@sparkjsdev/spark": "2.1.0",
     "three": "0.185.1"
   },

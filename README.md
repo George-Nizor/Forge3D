@@ -86,7 +86,7 @@ animated, exported, and used by ordinary engine systems.
 
 ## Installation
 
-Forge3D 0.2.0 is packaged for Windows x64. The tested external-tool setup is:
+Forge3D 0.2.1 is packaged for Windows x64. The tested external-tool setup is:
 
 - Blender 5.x, including the Steam Blender 5.2 LTS build
 - Godot 4.6
@@ -118,7 +118,10 @@ Blender is not found automatically. Adjust the Godot executable in
 
 ## Usage
 
-The normal interface is the Forge3D desktop, which drives the user's local Codex App Server session and streams steps, approvals, artifacts, previews, validation, and logs. Direct Codex or ChatGPT prompts remain supported, for example:
+The normal interface is the Forge3D desktop Spatial Canvas. Its command ribbon drives the user's
+local Codex App Server session, temporary edge drawers expose history and inspection, and the bottom
+production rail streams Plan, Build, Check, Output, approvals, artifacts, previews, and validation.
+Direct Codex or ChatGPT prompts remain supported, for example:
 
 > Create a game-ready industrial generator. Use authored Blender geometry,
 > keep an editable `.blend`, add collision and LODs, inspect it through Blender

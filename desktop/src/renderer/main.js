@@ -1,4 +1,6 @@
 import "./style.css";
+import "@fontsource/space-grotesk/500.css";
+import "@fontsource/space-grotesk/600.css";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -15,23 +17,58 @@ let previewDispose = () => {};
 let refreshTimer = null;
 
 app.innerHTML = `
-  <header class="topbar">
-    <div class="brand"><span class="brand-mark">F3</span><div><strong>Forge3D</strong><small>Codex-driven asset studio</small></div></div>
-    <div id="dependency-strip" class="dependency-strip"></div>
-    <div id="agent-state" class="agent-state">Connecting to Codex…</div>
+  <header class="command-ribbon">
+    <div class="brand" aria-label="Forge3D">
+      <svg class="brand-symbol" viewBox="0 0 512 512" aria-hidden="true">
+        <defs><linearGradient id="brand-copper" x1=".15" y1=".12" x2=".88" y2=".86"><stop stop-color="#ffd19c"/><stop offset=".42" stop-color="#e8893e"/><stop offset="1" stop-color="#8f371d"/></linearGradient></defs>
+        <path d="M132 344C205 425 354 389 412 287c46-80-15-166-102-176-65-8-122 18-160 66l54 37c27-30 65-43 103-33 52 14 72 64 42 104-36 48-114 61-171 21Z" fill="url(#brand-copper)"/>
+        <path d="M204 214c27-30 65-43 103-33 31 8 51 29 56 54-33-28-83-34-122-12-19 11-33 27-42 45l-47-20c10-13 28-27 52-34Z" fill="#ffe0b5" opacity=".28"/>
+        <g fill="none" stroke="#ee9a55" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"><path d="m132 344-44-44-9-60 20-44 51-19"/><path d="m178 306-27-40 15-37 38-15"/><path d="m88 300 63-34m-72-26 87-11m-67-33 52 70m-52-70 105 18"/></g>
+        <g fill="#ffd29f"><circle cx="132" cy="344" r="9"/><circle cx="88" cy="300" r="9"/><circle cx="79" cy="240" r="9"/><circle cx="99" cy="196" r="9"/><circle cx="150" cy="177" r="9"/><circle cx="151" cy="266" r="8"/><circle cx="166" cy="229" r="8"/><circle cx="204" cy="214" r="9"/></g>
+      </svg>
+      <strong>Forge3D</strong>
+    </div>
+    <div class="prompt-command">
+      <div id="attachments" class="attachment-row"></div>
+      <textarea id="prompt" rows="1" aria-label="Forge3D prompt" placeholder="Describe the object, scene, animation, or edit you want…"></textarea>
+      <div class="prompt-actions">
+        <button id="attach" class="command-button" title="Attach source files" aria-label="Attach source files">＋ <span>Attach</span></button>
+        <details id="advanced">
+          <summary class="command-button">Controls</summary>
+          <div class="advanced-grid">
+            <label>Workflow<select id="workflow"><option value="auto">Auto route</option><option value="authored-blender">Authored Blender</option><option value="image-to-mesh">Image to mesh</option><option value="gaussian-splat">Gaussian splat</option><option value="process">Process existing</option><option value="rig">Rig</option><option value="animate">Animate</option><option value="retarget">Retarget</option><option value="validate">Validate</option></select></label>
+            <label>Quality<select id="quality"><option value="balanced">Balanced</option><option value="draft">Draft</option><option value="production">Production</option></select></label>
+            <label>Target<select id="target"><option value="glb">GLB</option><option value="blend">BLEND</option><option value="splat">SPLAT/PLY</option><option value="gif">GIF / sequence</option></select></label>
+            <label>Tool / model<select id="tool"><option value="auto">Auto</option><option value="blender">Blender</option><option value="triposplat">TripoSplat</option><option value="spar3d">SPAR3D</option><option value="tripo-cloud">Tripo cloud</option></select></label>
+            <label>Codex model<select id="model"><option value="auto">Codex default</option></select></label>
+            <label>Reasoning<select id="effort"><option value="auto">Model default</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select></label>
+            <label class="cloud-consent"><input id="cloud-approved" type="checkbox" /> Allow cloud execution or file upload for this job only</label>
+          </div>
+        </details>
+        <button id="cancel" class="danger hidden">Cancel</button>
+        <button id="send" class="primary">Forge <span>↗</span></button>
+      </div>
+    </div>
+    <div class="ribbon-status">
+      <div id="dependency-strip" class="toolchain-state">Checking local toolchain…</div>
+      <div id="agent-state" class="agent-state"></div>
+    </div>
   </header>
-  <main class="workspace">
-    <aside class="library panel">
-      <div class="panel-heading"><div><small>LIBRARY</small><h2>Runs</h2></div><button id="new-run" class="icon-button" title="New run">＋</button></div>
+  <main class="spatial-workspace">
+    <section class="stage">
+      <div id="run-heading" class="run-heading"></div>
+      <div id="preview" class="preview"></div>
+      <div id="artifact-toolbar" class="artifact-toolbar"></div>
+    </section>
+    <button id="runs-toggle" class="edge-tab runs-tab" aria-expanded="false" aria-controls="library"><span>Runs</span></button>
+    <aside id="library" class="drawer library" aria-hidden="true">
+      <div class="drawer-heading"><div><small>RUN LIBRARY</small><h2>History</h2></div><div class="drawer-actions"><button id="new-run" class="icon-button" title="New run">＋</button><button class="icon-button drawer-close" data-close-drawer="library" aria-label="Close run history">×</button></div></div>
       <input id="run-search" class="search" type="search" placeholder="Search prompts, routes, status" />
       <div id="run-list" class="run-list"></div>
     </aside>
-    <section class="stage panel">
-      <div id="run-heading" class="run-heading"></div>
-      <div id="preview" class="preview"><div class="empty-state"><span>◇</span><h2>Select a run</h2><p>Images, animation, GLB/glTF, splats, and reports appear here.</p></div></div>
-      <div id="artifact-toolbar" class="artifact-toolbar"></div>
-    </section>
-    <aside class="inspector panel">
+    <button id="inspector-toggle" class="edge-tab details-tab" aria-expanded="false" aria-controls="inspector"><span>Details</span></button>
+    <aside id="inspector" class="drawer inspector" aria-hidden="true">
+      <div class="drawer-heading compact"><div><small>RUN DETAILS</small><h2>Inspector</h2></div><button class="icon-button drawer-close" data-close-drawer="inspector" aria-label="Close inspector">×</button></div>
       <div class="tabs" role="tablist">
         <button class="tab active" data-tab="steps">Steps</button>
         <button class="tab" data-tab="artifacts">Artifacts</button>
@@ -41,24 +78,12 @@ app.innerHTML = `
       <div id="inspector-content" class="inspector-content"></div>
     </aside>
   </main>
-  <section class="composer panel">
-    <div id="attachments" class="attachment-row"></div>
-    <textarea id="prompt" rows="3" placeholder="Describe the asset, edit, animation, validation, or conversion you want…"></textarea>
-    <div class="composer-controls">
-      <button id="attach" class="secondary">＋ Attach</button>
-      <details id="advanced">
-        <summary>Advanced controls</summary>
-        <div class="advanced-grid">
-          <label>Workflow<select id="workflow"><option value="auto">Auto route</option><option value="authored-blender">Authored Blender</option><option value="image-to-mesh">Image to mesh</option><option value="gaussian-splat">Gaussian splat</option><option value="process">Process existing</option><option value="rig">Rig</option><option value="animate">Animate</option><option value="retarget">Retarget</option><option value="validate">Validate</option></select></label>
-          <label>Quality<select id="quality"><option value="balanced">Balanced</option><option value="draft">Draft</option><option value="production">Production</option></select></label>
-          <label>Target<select id="target"><option value="glb">GLB</option><option value="blend">BLEND</option><option value="splat">SPLAT/PLY</option><option value="gif">GIF / sequence</option></select></label>
-          <label>Tool / model<select id="tool"><option value="auto">Auto</option><option value="blender">Blender</option><option value="triposplat">TripoSplat</option><option value="spar3d">SPAR3D</option><option value="tripo-cloud">Tripo cloud</option></select></label>
-          <label>Codex model<select id="model"><option value="auto">Codex default</option></select></label>
-          <label>Reasoning<select id="effort"><option value="auto">Model default</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select></label>
-          <label class="cloud-consent"><input id="cloud-approved" type="checkbox" /> Approve cloud access for this job only</label>
-        </div>
-      </details>
-      <div class="job-controls"><button id="cancel" class="danger hidden">Cancel</button><button id="send" class="primary">Run with Codex <span>↗</span></button></div>
+  <section class="production-rail">
+    <div class="rail-heading"><span>PRODUCTION</span><small id="rail-context">Waiting for a brief</small></div>
+    <div id="production-track" class="production-track"></div>
+    <div class="artifact-shelf">
+      <span class="shelf-label">OUTPUTS</span>
+      <div id="artifact-strip" class="artifact-strip"></div>
     </div>
   </section>
   <div id="approval-layer"></div>
@@ -68,7 +93,7 @@ app.innerHTML = `
 const elements = Object.fromEntries([
   "dependency-strip", "agent-state", "run-list", "run-search", "run-heading", "preview", "artifact-toolbar",
   "inspector-content", "attachments", "prompt", "workflow", "quality", "target", "tool", "model", "effort",
-  "cloud-approved", "send", "cancel", "approval-layer", "toast-layer",
+  "cloud-approved", "send", "cancel", "approval-layer", "toast-layer", "production-track", "artifact-strip", "rail-context",
 ].map((id) => [id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()), document.querySelector(`#${id}`)]));
 
 function artifactUrl(runId, relativePath) {
@@ -110,6 +135,17 @@ function selectedArtifact(run = selectedRun()) {
     || null;
 }
 
+function emptyPreview(title, detail) {
+  return `<div class="empty-state">
+    <svg class="empty-mark" viewBox="0 0 512 512" aria-hidden="true">
+      <path d="M132 344C205 425 354 389 412 287c46-80-15-166-102-176-65-8-122 18-160 66l54 37c27-30 65-43 103-33 52 14 72 64 42 104-36 48-114 61-171 21Z"/>
+      <g fill="none"><path d="m132 344-44-44-9-60 20-44 51-19"/><path d="m178 306-27-40 15-37 38-15"/><path d="m88 300 63-34m-72-26 87-11m-67-33 52 70m-52-70 105 18"/></g>
+    </svg>
+    <h2>${escapeHtml(title)}</h2>
+    <p>${escapeHtml(detail)}</p>
+  </div>`;
+}
+
 function statusLabel(status) {
   return String(status || "unknown").replaceAll("_", " ");
 }
@@ -123,11 +159,31 @@ function toast(message, kind = "info") {
 }
 
 function renderDependencies() {
-  const tool = (name, value) => `<span class="dependency ${value ? "ready" : "missing"}"><i></i>${escapeHtml(name)}</span>`;
-  elements.dependencyStrip.innerHTML = [tool("Codex", state.tools?.codex), tool("Blender", state.tools?.blender), tool("Godot", state.tools?.godot), tool("WSL", state.tools?.wsl)].join("");
+  const tools = [
+    ["Codex", state.tools?.codex],
+    ["Blender", state.tools?.blender],
+    ["Godot", state.tools?.godot],
+    ["WSL", state.tools?.wsl],
+  ];
+  const known = tools.filter(([, value]) => value !== undefined);
+  const missing = known.filter(([, value]) => !value).map(([name]) => name);
+  const checking = known.length < tools.length;
+  const failed = Boolean(state.appServerError);
+  const label = failed ? "LOCAL AGENT OFFLINE" : missing.length ? "LOCAL TOOLCHAIN NEEDS ATTENTION" : checking ? "CHECKING LOCAL TOOLCHAIN" : "LOCAL TOOLCHAIN READY";
+  const tone = failed ? "failed" : missing.length ? "warning" : checking ? "checking" : "ready";
+  elements.dependencyStrip.className = `toolchain-state ${tone}`;
+  elements.dependencyStrip.innerHTML = `<i></i><span>${escapeHtml(label)}</span>`;
+  elements.dependencyStrip.title = missing.length ? `Unavailable: ${missing.join(", ")}` : label;
+
   const skill = state.skill;
-  const skillText = skill?.state === "ready" ? `Forge3D ${skill.installedVersion}` : skill?.state === "version-mismatch" ? `Plugin ${skill.installedVersion} → ${skill.bundledVersion}` : "Plugin repair available";
-  elements.agentState.innerHTML = `<span class="status-dot ${state.appServerError ? "failed" : ""}"></span>${escapeHtml(state.appServerError || skillText)}${skill?.state !== "ready" ? ' <button id="repair-skill" class="link-button">Repair</button>' : ""}`;
+  const needsRepair = skill && skill.state !== "ready";
+  const message = failed
+    ? state.appServerError
+    : needsRepair
+      ? (skill.state === "version-mismatch" ? `Plugin ${skill.installedVersion} → ${skill.bundledVersion}` : "Plugin repair available")
+      : "";
+  elements.agentState.classList.toggle("hidden", !message);
+  elements.agentState.innerHTML = message ? `${escapeHtml(message)}${needsRepair ? ' <button id="repair-skill" class="link-button">Repair</button>' : ""}` : "";
   document.querySelector("#repair-skill")?.addEventListener("click", repairPlugin);
 }
 
@@ -152,12 +208,12 @@ function renderRuns() {
 function renderRunHeading() {
   const run = selectedRun();
   if (!run) {
-    elements.runHeading.innerHTML = '<div><small>PREVIEW</small><h1>No run selected</h1></div>';
+    elements.runHeading.innerHTML = '<div class="stage-context"><small>SPATIAL CANVAS</small><h1>Ready for a new asset</h1></div>';
     return;
   }
   const canContinue = !run.archived && !["running", "launching", "cancelling"].includes(run.status) && !state.activeJob;
   elements.runHeading.innerHTML = `
-    <div><small>${escapeHtml(run.workflow_route || run.command)} · ${escapeHtml(statusLabel(run.status))}</small><h1>${escapeHtml(run.prompt || run.name)}</h1></div>
+    <div class="stage-context"><small>${escapeHtml(run.workflow_route || run.command)} · ${escapeHtml(statusLabel(run.status))}</small><h1>${escapeHtml(run.prompt || run.name)}</h1></div>
     <div class="run-actions">
       ${canContinue ? '<button data-run-action="continue" class="secondary">Continue</button>' : ""}
       <button data-run-action="duplicate" class="secondary">Duplicate</button>
@@ -201,7 +257,7 @@ function disposeThree(scene, renderer, animationId, observer) {
 
 function threeBase(container, withSpark = false) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0e131a);
+  scene.background = new THREE.Color(0x11100f);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
   camera.position.set(2.5, 1.8, 3.2);
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -212,10 +268,10 @@ function threeBase(container, withSpark = false) {
   container.append(renderer.domElement);
   if (withSpark) scene.add(new SparkRenderer({ renderer }));
   else {
-    scene.add(new THREE.HemisphereLight(0xc9ddff, 0x25311f, 2.2));
-    const key = new THREE.DirectionalLight(0xffffff, 3.4);
+    scene.add(new THREE.HemisphereLight(0xf2ddc7, 0x241710, 2.2));
+    const key = new THREE.DirectionalLight(0xffc38c, 3.4);
     key.position.set(3, 6, 4);
-    scene.add(key, new THREE.GridHelper(12, 24, 0x334255, 0x1c2632));
+    scene.add(key, new THREE.GridHelper(12, 24, 0x5a3c2b, 0x241d19));
   }
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -314,7 +370,7 @@ async function renderPreview() {
   const run = selectedRun();
   const artifact = selectedArtifact(run);
   if (!run || !artifact) {
-    elements.preview.innerHTML = '<div class="empty-state"><span>◇</span><h2>No preview yet</h2><p>Run Forge3D or choose an artifact from the inspector.</p></div>';
+    elements.preview.innerHTML = emptyPreview("Shape the next thing", "Write a prompt above or choose an output from a previous run.");
     return;
   }
   selectedArtifactPath = artifact.path;
@@ -372,17 +428,57 @@ function renderInspector() {
     elements.inspectorContent.innerHTML = run.steps?.length ? `<ol class="step-list">${run.steps.map((step) => `<li><i class="step-state ${escapeHtml(step.status)}"></i><div><strong>${escapeHtml(step.name)}</strong><small>${escapeHtml(statusLabel(step.status))}</small></div></li>`).join("")}</ol>` : '<div class="empty-list">Workflow steps will stream here.</div>';
   } else if (tab === "artifacts") {
     elements.inspectorContent.innerHTML = run.artifacts?.length ? `<div class="artifact-list">${run.artifacts.map((artifact) => `<button class="artifact-card ${artifact.path === selectedArtifactPath ? "selected" : ""}" data-artifact-path="${escapeHtml(artifact.path)}"><span class="artifact-icon">${artifact.preview_role === "model" ? "3D" : artifact.preview_role === "gaussian-splat" ? "✦" : artifact.preview_role.includes("image") || artifact.preview_role === "animation" ? "▧" : "≡"}</span><span><strong>${escapeHtml(artifact.name)}</strong><small>${escapeHtml(artifact.preview_role)} · ${escapeHtml(formatBytes(artifact.size_bytes))}</small></span></button>`).join("")}</div>` : '<div class="empty-list">Artifacts are discovered inside this run only.</div>';
-    elements.inspectorContent.querySelectorAll("[data-artifact-path]").forEach((button) => button.addEventListener("click", () => { selectedArtifactPath = button.dataset.artifactPath; renderInspector(); renderPreview(); }));
+    elements.inspectorContent.querySelectorAll("[data-artifact-path]").forEach((button) => button.addEventListener("click", () => { selectedArtifactPath = button.dataset.artifactPath; renderInspector(); renderProductionRail(); renderPreview(); }));
   } else if (tab === "validation") {
     const validation = run.validation && Object.keys(run.validation).length ? run.validation : null;
     const reports = (run.artifacts || []).filter((artifact) => artifact.preview_role === "validation");
     elements.inspectorContent.innerHTML = `${validation ? `<pre class="mini-log">${escapeHtml(JSON.stringify(validation, null, 2))}</pre>` : '<div class="empty-list">No inline validation result yet.</div>'}${reports.map((report) => `<button class="report-link" data-artifact-path="${escapeHtml(report.path)}">${escapeHtml(report.name)}</button>`).join("")}`;
-    elements.inspectorContent.querySelectorAll("[data-artifact-path]").forEach((button) => button.addEventListener("click", () => { selectedArtifactPath = button.dataset.artifactPath; renderPreview(); }));
+    elements.inspectorContent.querySelectorAll("[data-artifact-path]").forEach((button) => button.addEventListener("click", () => { selectedArtifactPath = button.dataset.artifactPath; renderProductionRail(); renderPreview(); }));
   } else {
     const entries = run.transcript || [];
     elements.inspectorContent.innerHTML = entries.length ? `<div class="log-list">${entries.slice(-500).map((entry) => `<article class="log-entry ${escapeHtml(entry.kind)}"><small>${escapeHtml(entry.kind)} · ${escapeHtml(formatDate(entry.at))}</small><pre>${escapeHtml(entry.text || entry.method || JSON.stringify(entry.params || {}))}</pre></article>`).join("")}</div>` : '<div class="empty-list">Codex transcript and tool logs will stream here.</div>';
     elements.inspectorContent.scrollTop = elements.inspectorContent.scrollHeight;
   }
+}
+
+function artifactGlyph(artifact) {
+  if (artifact.preview_role === "model") return "3D";
+  if (artifact.preview_role === "gaussian-splat") return "✦";
+  if (artifact.preview_role === "validation") return "✓";
+  if (String(artifact.preview_role).includes("image") || artifact.preview_role === "animation") return "▧";
+  return "≡";
+}
+
+function renderProductionRail() {
+  const run = selectedRun();
+  const artifacts = run?.artifacts || [];
+  const validation = run?.validation && Object.keys(run.validation).length;
+  const complete = run?.status === "completed";
+  const activeIndex = !run ? 0 : complete ? 3 : validation ? 3 : artifacts.length ? 2 : 1;
+  const stages = [
+    ["PLAN", run ? (run.workflow_route || run.command || "Auto route") : "Waiting for a brief"],
+    ["BUILD", run ? (run.steps?.length ? `${run.steps.length} workflow steps` : statusLabel(run.status)) : "Tool route follows the prompt"],
+    ["CHECK", validation ? "Validation available" : run ? "Validation pending" : "Geometry and target checks"],
+    ["OUTPUT", artifacts.length ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"}` : "No output yet"],
+  ];
+  elements.railContext.textContent = run ? statusLabel(run.status) : "Waiting for a brief";
+  elements.productionTrack.innerHTML = stages.map(([label, note], index) => {
+    const stageState = complete || index < activeIndex ? "complete" : index === activeIndex ? (run?.status === "failed" ? "failed" : "active") : "pending";
+    return `<div class="production-node ${stageState}"><i><span>${String(index + 1).padStart(2, "0")}</span></i><div><strong>${label}</strong><small>${escapeHtml(note)}</small></div></div>`;
+  }).join("");
+  elements.artifactStrip.innerHTML = artifacts.length ? artifacts.map((artifact) => {
+    const imageRole = ["primary-image", "image", "animation"].includes(artifact.preview_role);
+    const visual = imageRole
+      ? `<img src="${artifactUrl(run.run_id, artifact.path)}" alt="" loading="lazy" />`
+      : `<span class="artifact-glyph">${artifactGlyph(artifact)}</span>`;
+    return `<button class="rail-artifact ${artifact.path === selectedArtifact(run)?.path ? "selected" : ""}" data-rail-artifact="${escapeHtml(artifact.path)}" title="${escapeHtml(artifact.name)}">${visual}<span>${escapeHtml(artifact.name)}</span></button>`;
+  }).join("") : '<div class="empty-shelf">Artifacts arrive here as the run works.</div>';
+  elements.artifactStrip.querySelectorAll("[data-rail-artifact]").forEach((button) => button.addEventListener("click", () => {
+    selectedArtifactPath = button.dataset.railArtifact;
+    renderProductionRail();
+    renderInspector();
+    renderPreview();
+  }));
 }
 
 function renderAttachments() {
@@ -392,7 +488,7 @@ function renderAttachments() {
 
 function renderComposer() {
   const active = state.activeJob;
-  elements.send.innerHTML = active ? 'Steer active job <span>↗</span>' : 'Run with Codex <span>↗</span>';
+  elements.send.innerHTML = active ? 'Steer <span>↗</span>' : 'Forge <span>↗</span>';
   elements.cancel.classList.toggle("hidden", !active);
   elements.cloudApproved.disabled = Boolean(active);
 }
@@ -418,6 +514,7 @@ function renderAll({ preview = true } = {}) {
   renderRuns();
   renderRunHeading();
   renderInspector();
+  renderProductionRail();
   renderComposer();
   renderApproval();
   if (preview) renderPreview();
@@ -426,6 +523,7 @@ function renderAll({ preview = true } = {}) {
 function selectRun(runId) {
   selectedRunId = runId;
   selectedArtifactPath = null;
+  setDrawer("library", false);
   renderAll();
 }
 
@@ -544,6 +642,16 @@ async function artifactAction(action) {
   } catch (error) { toast(error.message, "error"); }
 }
 
+function setDrawer(name, open) {
+  const drawer = document.querySelector(`#${name}`);
+  const toggle = document.querySelector(name === "library" ? "#runs-toggle" : "#inspector-toggle");
+  if (open) setDrawer(name === "library" ? "inspector" : "library", false);
+  drawer.classList.toggle("open", open);
+  drawer.setAttribute("aria-hidden", String(!open));
+  toggle.classList.toggle("open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+}
+
 document.querySelector("#attach").addEventListener("click", async () => {
   try {
     const picked = await api.pickAttachments();
@@ -551,7 +659,26 @@ document.querySelector("#attach").addEventListener("click", async () => {
     renderAttachments();
   } catch (error) { toast(error.message, "error"); }
 });
-document.querySelector("#new-run").addEventListener("click", () => { selectedRunId = null; selectedArtifactPath = null; elements.prompt.focus(); renderRuns(); renderRunHeading(); renderPreview(); });
+document.querySelector("#new-run").addEventListener("click", () => {
+  selectedRunId = null;
+  selectedArtifactPath = null;
+  setDrawer("library", false);
+  elements.prompt.focus();
+  renderRuns();
+  renderRunHeading();
+  renderInspector();
+  renderProductionRail();
+  renderPreview();
+});
+document.querySelector("#runs-toggle").addEventListener("click", () => setDrawer("library", !document.querySelector("#library").classList.contains("open")));
+document.querySelector("#inspector-toggle").addEventListener("click", () => setDrawer("inspector", !document.querySelector("#inspector").classList.contains("open")));
+document.querySelectorAll("[data-close-drawer]").forEach((button) => button.addEventListener("click", () => setDrawer(button.dataset.closeDrawer, false)));
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  setDrawer("library", false);
+  setDrawer("inspector", false);
+  document.querySelector("#advanced").removeAttribute("open");
+});
 elements.runSearch.addEventListener("input", renderRuns);
 elements.send.addEventListener("click", startOrSteer);
 elements.cancel.addEventListener("click", cancelActive);
@@ -560,6 +687,8 @@ document.querySelectorAll(".tab").forEach((button) => button.addEventListener("c
   document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
   renderInspector();
 }));
+
+renderAll();
 
 api.onState((next) => { state = { ...state, ...next }; renderAll({ preview: !state.activeJob }); });
 api.onEvent(() => scheduleRefresh());

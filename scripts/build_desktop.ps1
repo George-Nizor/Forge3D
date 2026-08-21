@@ -34,22 +34,35 @@ if (-not $SkipCli) {
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build forge3d.exe." }
 }
 
-Push-Location $desktopRoot
-try {
-    & npm ci
-    if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
-    if (-not $SkipTests) {
-        & npm test
-        if ($LASTEXITCODE -ne 0) { throw "Forge3D desktop tests failed." }
-    }
-    & npm run dist
-    if ($LASTEXITCODE -ne 0) { throw "Forge3D desktop packaging failed." }
+$npmSteps = [System.Collections.Generic.List[string]]::new()
+$npmSteps.Add("npm ci")
+if (-not $SkipTests) {
+    $npmSteps.Add("npm test")
 }
-finally {
-    Pop-Location
+$npmSteps.Add("npm run dist")
+
+if ($env:OS -eq "Windows_NT" -and $desktopRoot.StartsWith("\\")) {
+    # cmd.exe cannot use a UNC current directory. pushd maps the share to a
+    # temporary drive for this child process and removes it when cmd exits.
+    $npmCommand = 'pushd "{0}" && {1} && popd' -f $desktopRoot, ($npmSteps -join " && ")
+    & cmd.exe /d /s /c $npmCommand
+    if ($LASTEXITCODE -ne 0) { throw "Forge3D desktop dependency, test, or package step failed." }
+}
+else {
+    Push-Location $desktopRoot
+    try {
+        foreach ($npmStep in $npmSteps) {
+            $npmArguments = $npmStep.Substring(4).Split(" ")
+            & npm @npmArguments
+            if ($LASTEXITCODE -ne 0) { throw "Forge3D desktop step failed: $npmStep" }
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
-$assetName = "Forge3D-0.2.0-windows-x64.zip"
+$assetName = "Forge3D-0.2.1-windows-x64.zip"
 $asset = Join-Path $packageRoot $assetName
 if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
     throw "Forge3D release archive was not created: $asset"
@@ -58,7 +71,7 @@ $assetInfo = Get-Item -LiteralPath $asset
 $manifest = [ordered]@{
     schemaVersion = 1
     product = "forge3d"
-    version = "0.2.0"
+    version = "0.2.1"
     platform = "windows-x64"
     minimumInstrumentaVersion = "0.8.0"
     installStrategy = "managed-bundle"

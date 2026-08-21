@@ -37,6 +37,8 @@ The packaged Forge3D desktop also includes:
 - Three.js 0.185.1: MIT; its bundled license is preserved in the npm package.
 - SparkJS 2.1.0 and its fflate dependency: MIT; used only for local Gaussian
   splat preview.
+- Space Grotesk through Fontsource 5.3.0: SIL Open Font License 1.1; the exact
+  local font files are bundled for the Forge3D wordmark and display typography.
 - The PyInstaller bootloader used for the standalone Forge3D CLI, under the
   PyInstaller GPL license with its bootloader exception. Application code
   remains MIT and source is available in this repository.

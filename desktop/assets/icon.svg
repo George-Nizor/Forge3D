@@ -1,26 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
-  <title id="title">Forge3D wireframe cube</title>
+  <title id="title">Forge3D topology loop</title>
   <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#10171c"/>
-      <stop offset="1" stop-color="#562315"/>
+    <linearGradient id="icon-bg" x1="72" y1="38" x2="448" y2="474" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1b1916"/>
+      <stop offset=".62" stop-color="#100f0d"/>
+      <stop offset="1" stop-color="#2d1710"/>
     </linearGradient>
-    <radialGradient id="heat" cx="50%" cy="72%" r="58%">
-      <stop stop-color="#ffad55" stop-opacity=".9"/>
-      <stop offset="1" stop-color="#ff5a2a" stop-opacity="0"/>
+    <linearGradient id="icon-copper" x1="142" y1="116" x2="403" y2="389" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd7ab"/>
+      <stop offset=".22" stop-color="#f4a163"/>
+      <stop offset=".58" stop-color="#d86e31"/>
+      <stop offset="1" stop-color="#84321d"/>
+    </linearGradient>
+    <radialGradient id="icon-glow" cx="0" cy="0" r="1" gradientTransform="translate(302 286) rotate(130) scale(254)">
+      <stop stop-color="#d86631" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#d86631" stop-opacity="0"/>
     </radialGradient>
+    <filter id="icon-shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity=".5"/>
+    </filter>
   </defs>
-  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#background)"/>
-  <circle cx="256" cy="340" r="190" fill="url(#heat)"/>
-  <g fill="none" stroke="#ffe0b8" stroke-width="17" stroke-linejoin="round" stroke-linecap="round">
-    <path d="m256 84 142 82-142 82-142-82z"/>
-    <path d="M114 166v154l142 108 142-108V166M256 248v180"/>
-    <path d="m114 320 142-82 142 82"/>
-  </g>
-  <g fill="#ff9b4a">
-    <circle cx="256" cy="84" r="14"/>
-    <circle cx="398" cy="166" r="14"/>
-    <circle cx="256" cy="248" r="14"/>
-    <circle cx="114" cy="166" r="14"/>
+  <rect x="18" y="18" width="476" height="476" rx="102" fill="url(#icon-bg)"/>
+  <rect x="18.5" y="18.5" width="475" height="475" rx="101.5" fill="none" stroke="#6b422d"/>
+  <circle cx="270" cy="277" r="218" fill="url(#icon-glow)"/>
+  <g filter="url(#icon-shadow)">
+    <path d="M132 344C205 425 354 389 412 287c46-80-15-166-102-176-65-8-122 18-160 66l54 37c27-30 65-43 103-33 52 14 72 64 42 104-36 48-114 61-171 21Z" fill="url(#icon-copper)"/>
+    <path d="M204 214c27-30 65-43 103-33 31 8 51 29 56 54-33-28-83-34-122-12-19 11-33 27-42 45l-47-20c10-13 28-27 52-34Z" fill="#fff0d7" opacity=".3"/>
+    <path d="M178 306c57 40 135 27 171-21 25-34 15-74-19-95 17 5 31 14 42 26 23 27 23 65 0 96-43 57-137 71-205 23Z" fill="#8d381f" opacity=".38"/>
+    <g fill="none" stroke="#f09a55" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m132 344-44-44-9-60 20-44 51-19"/>
+      <path d="m178 306-27-40 15-37 38-15"/>
+      <path d="m88 300 63-34m-72-26 87-11m-67-33 52 70m-52-70 105 18"/>
+    </g>
+    <g fill="#ffd8ae" stroke="#a74a25" stroke-width="3">
+      <circle cx="132" cy="344" r="9"/><circle cx="88" cy="300" r="9"/><circle cx="79" cy="240" r="9"/><circle cx="99" cy="196" r="9"/>
+      <circle cx="150" cy="177" r="9"/><circle cx="151" cy="266" r="8"/><circle cx="166" cy="229" r="8"/><circle cx="204" cy="214" r="9"/>
+    </g>
   </g>
 </svg>
