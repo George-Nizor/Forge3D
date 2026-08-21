@@ -1,89 +1,96 @@
 # Forge3D desktop architecture
 
-## Scope
+Forge3D 0.2.2 wraps the prompt-first toolkit in a local Electron client. It runs one Codex job at a
+time and stores the complete job under `%USERPROFILE%\Documents\Forge3D\runs`.
 
-Forge3D 0.2.2 adds a local Electron rich client around the existing prompt-first toolkit. It is not
-a hosted web application, daemon, database, arbitrary file manager, or replacement for Blender,
-Godot, WSL/CUDA, or large model installations. It runs one Codex job at a time and stores each job as
-a self-contained directory under `%USERPROFILE%\Documents\Forge3D\runs`.
+## Process boundary
 
-## Process and security boundary
+The renderer uses `sandbox: true`, `contextIsolation: true`, and `nodeIntegration: false`. Its Content
+Security Policy is restrictive. Window creation, navigation, and Electron permissions are denied by
+default.
 
-The renderer has `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, a restrictive
-Content Security Policy, denied window creation/navigation, and deny-by-default Electron permissions.
-It receives only named operations from the preload bridge. The main process validates the renderer
-origin, run ID, relative artifact path, and final contained filesystem path before every operation.
+The preload bridge exposes named operations only. Before an operation reaches the filesystem, the
+main process checks the renderer origin, run ID, relative artifact path, resolved path, file type, and
+symlink state.
 
-Artifacts are served through `forge3d-artifact:`. The protocol resolves a run ID and relative path
-through the run store, rejects traversal and symbolic links, and returns only a regular file. The UI
-does not receive a generic filesystem API. Reveal, default open, Blender open, Godot review, copy
-path, duplicate, archive, and Recycle Bin actions are individually named. No arbitrary move action is
-available.
+Artifacts are served through `forge3d-artifact:`. Reveal, default open, Blender open, Godot review,
+copy path, duplicate, archive, and Recycle Bin actions each have their own handler. The renderer never
+receives a general filesystem API.
 
-Attachments are copied into `attachments/` before a job starts. The agent works in the run directory
-with workspace-write access limited to that directory. Network access is disabled unless the user
-checks the per-job cloud approval and confirms it. Provider charges, uploads, commands, or file
-changes can still trigger App Server approvals.
+## Workstation layout
 
-## UI A workstation and identity
+The shipped UI uses the viewport-first workstation recorded in
+[the brand guide](brand-identity.md):
 
-The desktop uses the approved UI A three-pane workstation: permanent grouped run history on the
-left, the viewport and docked prompt composer in the center, and a permanent
-steps/artifacts/validation/logs inspector on the right. The application and viewport toolbars are
-icon-led. External-tool health occupies one compact bottom status bar. There are no dashboard cards,
-edge drawers, numbered production rail, marketing subtitle, or instructional heading over the empty
-viewport.
+- One application bar contains the approved mark, prompt omnibox, attachment action, settings, and
+  the primary Run control.
+- The viewport fills the workspace below it and shows a studio field when no artifact is selected.
+- A compact icon rail on the left controls the view.
+- Run history and the inspector float on the right. Either panel can collapse into an edge tab.
+- The production dock maps real run state onto Plan, Build, Check, and Output.
+- The filmstrip opens outputs without replacing the run context.
+- A hairline status bar reports the local toolchain.
 
-Forge3D's canonical Logo A is the generated copper loop that transitions from an irregular
-triangular topology cage into a finished curved surface. The same processed PNG master supplies the
-Windows icon, renderer wordmark, and Instrumenta artwork. Space Grotesk is bundled for the wordmark;
-Segoe UI Variable is used for controls to remain consistent with Instrumenta. Canonical usage and
-prohibited redraws are recorded in [brand-identity.md](brand-identity.md).
+The app uses the approved Topology Loop mark. Space Grotesk handles the name and display labels; Segoe
+UI Variable handles controls.
 
-## Codex App Server lifecycle
+## Codex App Server
 
-Forge3D starts the user's installed Codex CLI as `codex app-server` with its default stdio transport.
-The transport is newline-delimited JSON and follows this lifecycle:
+Forge3D starts the user's installed Codex CLI as `codex app-server` over stdio JSONL.
 
-1. Send `initialize` with Forge3D client metadata and wait for the response.
-2. Send the `initialized` notification.
-3. Call `skills/list` for the runs root and locate the enabled `forge3d` skill.
-4. Start or resume a persistent thread.
-5. Start a turn with `$forge3d`, the explicit skill item, copied local images, the run directory,
-   `workspaceWrite`, contained writable roots, and the selected model/effort.
-6. Stream turn, item, agent-message, command-output, and error notifications into run history.
-7. Route server-initiated command/file approval requests to the modal and return the user's exact
-   decision.
-8. Use `turn/steer` for new instructions and `turn/interrupt` for cancellation.
-9. On `turn/completed`, persist the final status and refresh contained artifacts.
+The client initializes the server, lists skills, finds `forge3d`, and starts or resumes a persistent
+thread. A turn receives the Forge3D skill, copied attachments, selected workflow settings, the run
+directory, and a contained workspace-write sandbox. Streamed items become transcript and progress
+events in `run.json`.
 
-A process crash marks launching/running/cancelling jobs interrupted on the next launch. Their history
-and Codex IDs remain browsable and can be continued by resuming the stored thread.
+Steering uses `turn/steer`. Cancellation uses `turn/interrupt`. When the app restarts, transient jobs
+become interrupted while their thread and turn identifiers remain available for continuation.
 
-## Plugin version and repair
+## Approval policy
 
-`skills/list` is authoritative for discovery. Forge3D reads the discovered plugin manifest and
-compares it with the bundled 0.2.2 plugin. Missing, invalid, or mismatched registrations show a repair
-action. Repair is explicit: the current personal plugin directory is moved to a timestamped backup,
-the bundled plugin is copied, machine-specific Blender/Godot MCP configuration is generated, the
-personal marketplace entry is updated, and `codex plugin add forge3d@personal` is invoked. Failure
-restores the backup.
+Attachments are copied into `attachments/` before the job starts. The agent's writable root is the
+run directory.
+
+Forge3D accepts these requests automatically for the current session:
+
+- local commands whose working directory and requested write paths stay inside the run;
+- file changes contained by the run; and
+- local Blender or Godot MCP calls without remote intent.
+
+Network access is disabled unless the job's cloud checkbox is confirmed. A network request, remote
+provider action, or write outside the run stays interactive. This removes the pointless approval
+drumbeat from local asset work while keeping the expensive or surprising operations visible.
+
+## Plugin repair
+
+`skills/list` is authoritative. Forge3D compares the discovered plugin with the bundled 0.2.2 copy.
+The Repair action backs up the personal plugin, installs the bundled files, writes machine-specific
+Blender/Godot MCP configuration, updates the personal marketplace entry, and registers the plugin.
+A failure restores the backup.
 
 ## External tools and local state
 
-The bundle contains the Electron UI, a standalone `forge3d.exe` CLI, deterministic Blender tasks,
-the Forge3D Codex plugin, and a Godot review template. Blender, Godot, WSL, CUDA, local AI models, and
-Codex authentication/configuration remain external and are detected.
+The bundle contains the Electron app, `forge3d.exe`, reviewed Blender tasks, the Codex plugin, and a
+Godot review template. Blender, Godot, WSL, CUDA, Codex authentication, and model payloads are
+detected separately.
 
-Generated review assets, plugin configuration, logs, and caches live under
-`%LOCALAPPDATA%\Instrumenta\Forge3D`. The Godot template is synchronized there per Forge3D version.
-There are no absolute references to any former checkout location.
+Generated review material and caches live under `%LOCALAPPDATA%\Instrumenta\Forge3D`. The Godot
+template is synchronized there by Forge3D version. Runtime configuration contains no path to the
+former repository name.
 
 ## Preview routing
 
-- PNG/JPEG/WebP and GIF use native image playback.
-- Directories containing ordered raster frames expose a 12 fps image-sequence preview.
-- GLB/glTF uses bundled Three.js, OrbitControls, animation mixers, and bounding-sphere framing.
-- PLY/SPLAT/SOG uses bundled SparkJS and the proven TripoSplat coordinate conversion.
-- Validation JSON and text/log artifacts render as contained text.
-- Unsupported formats display metadata and retain reveal/open actions.
+- PNG, JPEG, WebP, and GIF use native image playback.
+- Ordered raster directories play as 12 fps image sequences.
+- GLB and glTF use bundled Three.js, OrbitControls, animation mixers, and bounding-sphere framing.
+- PLY, SPLAT, and SOG use bundled SparkJS plus the tested TripoSplat coordinate conversion.
+- Validation JSON and text/log artifacts render through contained readers.
+- Unsupported files show metadata and keep their named open actions.
+
+## Recovery and file actions
+
+`run.json` is written atomically. On startup, launching, running, and cancelling states recover as
+interrupted. Duplicate copies the prompt and declared attachments into a new run. Archive moves a run
+into the hidden archive below the run root. Trash uses the Windows Recycle Bin.
+
+Every action remains run-scoped. Arbitrary filesystem moves are outside the desktop contract.
